@@ -45,8 +45,12 @@ occ_names = [
      'vegetation'
 ]
 
-num_gpus = 4
-batch_size = 2
+# num_gpus = 4
+# batch_size = 2
+num_gpus = 1
+batch_size = 1
+workers_per_gpu=0
+
 num_iters_per_epoch = 28130 // (num_gpus * batch_size)
 num_epochs = 24
 num_epochs_single_frame = 2
@@ -133,6 +137,8 @@ model = dict(
 
 dataset_type = 'NuScenesDatasetSurroundOcc'
 data_root = '/home/lianghao/wangyushen/data/wangyushen/Datasets/data/v1.0-trainval/'
+occ_gt = '/home/lianghao/wangyushen/data/wangyushen/Datasets/data'
+
 
 file_client_args = dict(backend='disk')
 
@@ -185,7 +191,7 @@ test_pipeline = [
 
 data = dict(
     samples_per_gpu=batch_size,
-    workers_per_gpu=4,
+    workers_per_gpu=workers_per_gpu,
     train=dict(
         type=dataset_type,
         data_root=data_root,
@@ -202,10 +208,14 @@ data = dict(
         box_type_3d='LiDAR'),
     val=dict(type=dataset_type, pipeline=test_pipeline,
             #  ann_file=data_root + 'nuscenes_infos_val_sweep.pkl',
+             data_root=data_root,
+             occ_gt=occ_gt,
              ann_file='/home/lianghao/wangyushen/data/wangyushen/Datasets/data/nusc_annos/superocc/nuscenes_infos_val_sweep.pkl',
              classes=object_names, modality=input_modality),
     test=dict(type=dataset_type, pipeline=test_pipeline,
             #   ann_file=data_root + 'nuscenes_infos_val_sweep.pkl',
+              data_root=data_root,
+              occ_gt=occ_gt,
               ann_file='/home/lianghao/wangyushen/data/wangyushen/Datasets/data/nusc_annos/superocc/nuscenes_infos_val_sweep.pkl',
               classes=object_names, modality=input_modality),
     shuffler_sampler=dict(

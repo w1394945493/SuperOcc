@@ -20,9 +20,15 @@ class NuScenesDatasetSurroundOcc(NuScenesDataset):
     This datset only add camera intrinsics and extrinsics to the results.
     """
 
-    def __init__(self, seq_mode=False, seq_split_num=1, adj_list=[], *args, **kwargs):
+    def __init__(self,
+                 occ_gt = '',
+                 seq_mode=False, seq_split_num=1, adj_list=[], *args, **kwargs):
         super().__init__(*args, **kwargs)
+
+
+        self.occ_gt = occ_gt
         self.data_infos = self.load_annotations(self.ann_file)
+        # self.data_infos = self.data_infos[:5] #!! 只取前5个
         self.adj_list = adj_list
 
         if seq_mode:
@@ -57,8 +63,8 @@ class NuScenesDatasetSurroundOcc(NuScenesDataset):
                 curr_new_flag = 0
                 for curr_flag in range(len(bin_counts)):
                     curr_sequence_length = np.array(
-                        list(range(0, 
-                                bin_counts[curr_flag], 
+                        list(range(0,
+                                bin_counts[curr_flag],
                                 math.ceil(bin_counts[curr_flag] / self.seq_split_num)))
                         + [bin_counts[curr_flag]])
 
@@ -159,8 +165,8 @@ class NuScenesDatasetSurroundOcc(NuScenesDataset):
         #         pts_filename=info['lidar_path'],
         #         lidar_sweeps={'prev': lidar_sweeps_prev, 'next': lidar_sweeps_next},
         #     ))
-
-        input_dict['occ_gt_path'] = os.path.join(self.data_root, 'surround_occ', 'samples')
+        # todo-----------------------------------------------------------------------------------#
+        input_dict['occ_gt_path'] = os.path.join(self.occ_gt, 'surroundocc', 'samples')
 
         if self.modality['use_camera']:
             img_paths = []
@@ -266,7 +272,7 @@ class NuScenesDatasetSurroundOcc(NuScenesDataset):
         from tqdm import tqdm
         for i in tqdm(range(len(occ_results))):
             info = self.data_infos[i]
-            occ_gt_path = os.path.join(self.data_root, 'surround_occ', 'samples')
+            occ_gt_path = os.path.join(self.occ_gt, 'surroundocc', 'samples')
             occ_gt_path = os.path.join(occ_gt_path, info['lidar_path'].split('/')[-1] + '.npy')
             label = np.load(occ_gt_path)
             occ_labels = np.ones((200, 200, 16), dtype=np.int64) * 17
@@ -292,7 +298,7 @@ class NuScenesDatasetSurroundOcc(NuScenesDataset):
         from tqdm import tqdm
         for i in tqdm(range(len(occ_results))):
             info = self.data_infos[i]
-            occ_gt_path = os.path.join(self.data_root, 'surround_occ', 'samples')
+            occ_gt_path = os.path.join(self.occ_gt, 'surroundocc', 'samples')
             occ_gt_path = os.path.join(occ_gt_path, info['lidar_path'].split('/')[-1] + '.npy')
             label = np.load(occ_gt_path)
             occ_labels = np.ones((200, 200, 16), dtype=np.int64) * 17

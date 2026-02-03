@@ -1,0 +1,21 @@
+{
+    // 使用 IntelliSense 了解相关属性。
+    // 悬停以查看现有属性的描述。
+    // 欲了解更多信息，请访问: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "superocc test",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "/home/lianghao/wangyushen/Projects/SuperOcc/tools_1/test.py",
+            "args": [
+                "/home/lianghao/wangyushen/Projects/SuperOcc/projects/configs/superocc_surroundocc/superocc-l_r50_704_seq_nui_24e_custom.py",
+                "/home/lianghao/wangyushen/data/wangyushen/Weights/superocc/superocc-l_r50_704_seq_nui_24e.pth",
+                "--eval=bbox",
+            ],
+            "console": "integratedTerminal",
+            // "justMyCode": false,
+        }
+    ]
+}

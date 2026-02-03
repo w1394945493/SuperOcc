@@ -140,20 +140,20 @@ class StreamOccHead(BaseModule):
         self.memory_egopose = None
 
     def pre_update_memory(self, data):
-        x = data['prev_exists']
+        x = data['prev_exists'] # todo 0或1: prev_exist为1表示当前帧不是新场景的开始，为0表示当前帧是新场景的第0帧
         B = x.size(0)
         # refresh the memory when the scene changes
-        if self.memory_embedding is None:
-            self.memory_embedding = x.new_zeros(B, self.memory_len, self.embed_dims).float()
+        if self.memory_embedding is None: # todo 记忆初始化： 当第一帧进入，创建全零张量来占位
+            self.memory_embedding = x.new_zeros(B, self.memory_len, self.embed_dims).float() # todo (1 3000 256)
             self.memory_reference_point = x.new_zeros(B, self.memory_len, 3).float()
             self.memory_timestamp = x.new_zeros(B, self.memory_len, 1).float()
             self.memory_egopose = x.new_zeros(B, self.memory_len, 4, 4).float()
             self.memory_mask = x.new_zeros(B, self.memory_len).int()
         else:
             self.memory_timestamp += data['timestamp'].unsqueeze(-1).unsqueeze(-1)
-            self.memory_egopose = data['ego_pose_inv'].unsqueeze(1) @ self.memory_egopose
+            self.memory_egopose = data['ego_pose_inv'].unsqueeze(1) @ self.memory_egopose # todo 利用当前帧和上一帧的位姿变换，通过矩阵相乘，将历史记忆中的所有点坐标全部投影到当前帧坐标系下
             self.memory_reference_point, _ = transform_reference_points(self.memory_reference_point, data['ego_pose_inv'], reverse=False)
-
+            # todo 场景切换时的记忆重置
             self.memory_timestamp = memory_refresh(self.memory_timestamp[:, :self.memory_len], x)
             self.memory_reference_point = memory_refresh(self.memory_reference_point[:, :self.memory_len], x)
             self.memory_embedding = memory_refresh(self.memory_embedding[:, :self.memory_len], x)
@@ -187,7 +187,7 @@ class StreamOccHead(BaseModule):
         self.memory_timestamp -= data['timestamp'].unsqueeze(-1).unsqueeze(-1)
         self.memory_egopose = data['ego_pose'].unsqueeze(1) @ self.memory_egopose
 
-    def prop_queries(self, query_feat, reference_points, temp_memory, temp_reference_point, data):
+    def prop_queries(self, query_feat, reference_points, temp_memory, temp_reference_point, data): # todo query传播与采样
         """
         Args:
             query_feat: (B, Q, C)
@@ -202,14 +202,14 @@ class StreamOccHead(BaseModule):
         B, Q, C = query_feat.shape
         num_prop = self.num_propagated
         num_keep = Q - num_prop
-
+        # todo 模型直接从历史记忆中取前num_prop个特征
         prev_exists = data["prev_exists"].view(B, 1, 1)
         prop_feat = temp_memory[:, :num_prop]  # (B, num_prop, C)
         prop_reference_points = temp_reference_point[:, :num_prop]  # (B, num_prop, 3)
 
         real_prop_reference_points = decode_points(prop_reference_points, self.pc_range)  # (B, N_prop，3)
         real_reference_points = decode_points(reference_points, self.pc_range)  # (B, N_init，3)
-
+        # todo 计算距离与“去重”策略
         # (B, num_prop, Q, 3)
         diff = real_prop_reference_points[:, :, None, :] - real_reference_points[:, None, :, :]
         dist2 = (diff ** 2).sum(-1)   # (B, num_prop, Q)
@@ -232,23 +232,23 @@ class StreamOccHead(BaseModule):
 
         return new_query_feat, new_reference_points
 
-    def temporal_alignment(self, query_feat, reference_points, data):
-        B = query_feat.size(0)
+    def temporal_alignment(self, query_feat, reference_points, data): # todo 进行时序对齐与记忆融合：在语义层面将当前帧特征与历史记忆进行深度对齐与融合
+        B = query_feat.size(0) # todo query_feat: (1 3600 256)
         temp_reference_point = (self.memory_reference_point - self.pc_range[:3]) / \
                                (self.pc_range[3:6] - self.pc_range[0:3])
-        temp_memory = self.memory_embedding
+        temp_memory = self.memory_embedding # todo (1 3000 256)
         memory_mask = self.memory_mask
         rec_ego_pose = torch.eye(4, device=query_feat.device).unsqueeze(0).unsqueeze(0).repeat(B, query_feat.size(1), 1, 1)
 
-        if self.with_ego_pos:
-            rec_ego_motion = torch.cat([torch.zeros_like(reference_points[..., :1]), rec_ego_pose[..., :3, :].flatten(-2)], dim=-1)
-            rec_ego_motion = self.nerf_encoder(rec_ego_motion)
-            query_feat = self.ego_pose_memory(query_feat, rec_ego_motion)
-            memory_ego_motion = torch.cat([self.memory_timestamp.float(), self.memory_egopose[..., :3, :].flatten(-2)], dim=-1)
+        if self.with_ego_pos: # todo True
+            rec_ego_motion = torch.cat([torch.zeros_like(reference_points[..., :1]), rec_ego_pose[..., :3, :].flatten(-2)], dim=-1) # todo (1 3600 13)
+            rec_ego_motion = self.nerf_encoder(rec_ego_motion) # todo NeRF中的频率编码 -> (1 3600 156) 156 = 13 * 6(6个不同频率) * 2(sin和cos)
+            query_feat = self.ego_pose_memory(query_feat, rec_ego_motion) # todo (1 3600 256)
+            memory_ego_motion = torch.cat([self.memory_timestamp.float(), self.memory_egopose[..., :3, :].flatten(-2)], dim=-1) # todo (1 3600 13)
             memory_ego_motion = self.nerf_encoder(memory_ego_motion)
-            temp_memory = self.ego_pose_memory(temp_memory, memory_ego_motion)
+            temp_memory = self.ego_pose_memory(temp_memory, memory_ego_motion) # todo 特征调制
 
-        if self.prop_query:
+        if self.prop_query: # todo True
             query_feat, reference_points = self.prop_queries(query_feat, reference_points, temp_memory, temp_reference_point, data)
             temp_memory = temp_memory[:, self.num_propagated:]
             temp_reference_point = temp_reference_point[:, self.num_propagated:]
@@ -261,13 +261,13 @@ class StreamOccHead(BaseModule):
             self.pre_update_memory(data)
 
         mlvl_feats = data['img_feats']
-        B, Q, = mlvl_feats[0].shape[0], self.num_query
+        B, Q, = mlvl_feats[0].shape[0], self.num_query # todo self.num_query: 3600
         # (N_query, 3) --> (B, N_query, 3)
-        init_points = self.init_points.weight[None, :, :].repeat(B, 1, 1)
+        init_points = self.init_points.weight[None, :, :].repeat(B, 1, 1) # todo (1 3600 3)
         # (B, N_query, C)
-        query_feat = init_points.new_zeros(B, Q, self.embed_dims)
+        query_feat = init_points.new_zeros(B, Q, self.embed_dims) # todo (1 3600 256)
 
-        if self.temp_fusion:
+        if self.temp_fusion: # todo True
             query_feat, reference_points, temp_memory, temp_reference_point, memory_mask, rec_ego_pose = \
                 self.temporal_alignment(query_feat, init_points, data)
         else:
@@ -280,11 +280,11 @@ class StreamOccHead(BaseModule):
         # cls_scores: List[(B, N_query, n_refine_1, n_cls), (B, N_query, n_refine_2, n_cls), ...]
         # refine_sqs: List[(B, N_query, n_refine_1, 13), (B, N_query, n_refine_2, 13), ...]
         query_feats, cls_scores, refine_sqs = self.transformer(
-            query_feat,  # (B, N_query, C)
-            reference_points.unsqueeze(dim=2),  # (B, N_query, 1, 3)
-            temp_memory,  # (B, Mem, C)
-            temp_reference_point,  # (B, N_query, 3)
-            memory_mask,
+            query_feat,  # (B, N_query, C) # todo (1 3600 256)
+            reference_points.unsqueeze(dim=2),  # (B, N_query, 1, 3) # todo (1 3600 1 3)
+            temp_memory,  # (B, Mem, C) # todo (1 Mem 256)
+            temp_reference_point,  # (B, N_query, 3) # todo (1 0 3)
+            memory_mask, # todo (1 0)
             mlvl_feats,  # List[(B, N, C=256, H2, W2), ..., (B, N, C=256, H5, W5)]
             data,
             img_metas=img_metas,
@@ -307,13 +307,15 @@ class StreamOccHead(BaseModule):
             u = self.u_range[0] + (self.u_range[1] - self.u_range[0]) * uv[..., :1]  # (B, Q，N_refine, 1)
             v = self.v_range[0] + (self.v_range[1] - self.v_range[0]) * uv[..., 1:]  # (B, Q，N_refine, 1)
             sqs = torch.cat([sq_mean, sq_scales, rot, opa, u, v], dim=-1)
-            cls_score = cls_scores[i]
+            cls_score = cls_scores[i] # todo (1 3600 4 17)
             refine_sqs_list.append(sqs)
             cls_scores_list.append(cls_score)
-
-            occ_pred = self.sq2occ(cls_score, sqs)
+            # todo ---------------------------------------------------------#
+            # todo 超二次曲面到体素溅射 sq2occ
+            occ_pred = self.sq2occ(cls_score, sqs) # todo (1 200 200 16 18)
             pred_occ_list.append(occ_pred)
-
+            # todo ---------------------------------------------------------#
+            # todo 保存中间jian
             if DUMP.enabled and i == (len(refine_sqs) - 1):
                 scene_name = img_metas[0]['scene_name']
                 sample_idx = img_metas[0]['sample_idx']
@@ -327,7 +329,7 @@ class StreamOccHead(BaseModule):
                 np.savez_compressed(f'{save_path}/pred_semantics.npz', cls_score=cls_score.detach().cpu().numpy())
                 np.savez_compressed(f'{save_path}/pred_occupancy.npz', occ_pred=occ_pred.detach().cpu().numpy().astype(np.uint8))
 
-        if self.temp_fusion:
+        if self.temp_fusion: # todo True
             self.post_update_memory(data, rec_ego_pose, query_feats, cls_scores, refine_sqs)
 
         return dict(init_points=init_points,
@@ -586,7 +588,7 @@ class MLN(nn.Module):
         nn.init.ones_(self.gamma.bias)
         nn.init.zeros_(self.beta.bias)
 
-    def forward(self, x, c):
+    def forward(self, x, c): # todo 进行特征调制：使用外部的条件信号来动态控制主特征表现
         if self.use_ln:
             x = self.ln(x)
         c = self.reduce(c)

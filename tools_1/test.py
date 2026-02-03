@@ -3,6 +3,11 @@
 # ---------------------------------------------
 #  Modified by Zhiqi Li
 # ---------------------------------------------
+
+from setproctitle import setproctitle
+setproctitle("wys")
+
+
 import argparse
 import mmcv
 import os
@@ -229,7 +234,8 @@ def main():
     if not distributed:
         # assert False
         model = MMDataParallel(model, device_ids=[0])
-        outputs = single_gpu_test(model, data_loader, args.show, args.show_dir)
+        # todo 推理
+        outputs = single_gpu_test(model, data_loader, args.show, args.show_dir) # todo args.show:True/False, args.show_dir:结果保存路径
     else:
         model = MMDistributedDataParallel(
             model.cuda(),

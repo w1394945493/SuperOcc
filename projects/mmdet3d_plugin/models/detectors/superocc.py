@@ -141,7 +141,7 @@ class SuperOCC(MVXTwoStageDetector):
             BN, C, H, W = img_feat.size()
             img_feats_reshaped.append(img_feat.view(B, int(BN / B), C, H, W))
 
-        return img_feats_reshaped
+        return img_feats_reshaped # todo (1 6 256 67 174) (1 6 256 32 88) (1 6 256 16 44) (1 6 256 8 22)
 
     @force_fp32(apply_to=('img', 'points'))
     def forward(self, return_loss=True, **data):
@@ -227,10 +227,10 @@ class SuperOCC(MVXTwoStageDetector):
     def simple_test_online(self, img_metas, **data):
         self.fp16_enabled = False
         assert len(img_metas) == 1  # batch_size = 1
-        img = data['img']
+        img = data['img'] # todo (1 6 3 256 704)
 
         B, N, C, H, W = img.shape
-        img = img.reshape(B, N // 6, 6, C, H, W)
+        img = img.reshape(B, N // 6, 6, C, H, W) # todo (1 1 6 3 256 704)
 
         img_filenames = img_metas[0]['filename']
         num_frames = len(img_filenames) // 6
@@ -241,28 +241,28 @@ class SuperOCC(MVXTwoStageDetector):
         img_metas[0]['pad_shape'] = [img_shape for _ in range(len(img_filenames))]
 
         img_feats_list, img_metas_list = [], []
-
+        # todo 将多帧图像按时间顺序拆解，逐帧提取特征，使用队列和字典来管理特征
         # extract feature frame by frame
-        for i in range(num_frames):
-            img_indices = list(np.arange(i * 6, (i + 1) * 6))
+        for i in range(num_frames): # todo 逐帧处理元数据
+            img_indices = list(np.arange(i * 6, (i + 1) * 6)) # todo 当前帧对应的索引
 
             img_metas_curr = [{}]
-            for k in img_metas[0].keys():
+            for k in img_metas[0].keys(): # todo len(img_metas[0]['filename]):48
                 item = img_metas[0][k]
                 if isinstance(item, list) and (len(item) == 6 * num_frames):
                     img_metas_curr[0][k] = [item[j] for j in img_indices]
                 else:
                     img_metas_curr[0][k] = item
-
+            # todo 特征缓存
             if img_filenames[img_indices[0]] in self.memory:
                 # found in memory
-                img_feats_curr = self.memory[img_filenames[img_indices[0]]]
+                img_feats_curr = self.memory[img_filenames[img_indices[0]]] # todo 直接取缓存
             else:
                 # extract feature and put into memory
-                img_feats_curr = self.extract_feat(img[:, i], img_metas_curr)
-                self.memory[img_filenames[img_indices[0]]] = img_feats_curr
+                img_feats_curr = self.extract_feat(img[:, i], img_metas_curr) # todo 重新计算
+                self.memory[img_filenames[img_indices[0]]] = img_feats_curr # todo 重新计算
                 self.queue.put(img_filenames[img_indices[0]])
-                while self.queue.qsize() > 16:  # avoid OOM
+                while self.queue.qsize() > 16:  # avoid OOM # todo 缓存上限：16帧
                     pop_key = self.queue.get()
                     self.memory.pop(pop_key)
 
@@ -270,7 +270,7 @@ class SuperOCC(MVXTwoStageDetector):
             img_metas_list.append(img_metas_curr)
 
         # reorganize
-        feat_levels = len(img_feats_list[0])
+        feat_levels = len(img_feats_list[0]) # todo 4
         img_feats_reorganized = []
         for j in range(feat_levels):
             feat_l = torch.cat([img_feats_list[i][j] for i in range(len(img_feats_list))], dim=0)
@@ -285,8 +285,8 @@ class SuperOCC(MVXTwoStageDetector):
 
         img_feats = img_feats_reorganized
         img_metas = img_metas_reorganized
-        img_feats = cast_tensor_type(img_feats, torch.half, torch.float32)
-        data['img_feats'] = img_feats
+        img_feats = cast_tensor_type(img_feats, torch.half, torch.float32) # todo 从float16转回float32
+        data['img_feats'] = img_feats # todo img_feats: list:4 (1 48 256 64 176) (1 48 256 32 88) (1 48 256 16 44) (1 48 256 8 22)
 
         # run occupancy predictor
         return self.simple_test_pts(img_metas, **data)

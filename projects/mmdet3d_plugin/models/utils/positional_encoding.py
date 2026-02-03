@@ -8,7 +8,7 @@
 # ------------------------------------------------------------------------
 import math
 import torch
-import torch.nn as nn 
+import torch.nn as nn
 import numpy as np
 from torch.cuda.amp import autocast as autocast
 
@@ -96,13 +96,13 @@ class NerfPositionalEncoder(nn.Module):
 
         self.register_buffer('frequency_bands', frequency_bands)
 
-    def forward(self, tensor):
+    def forward(self, tensor): # todo 位置编码：NeRF中的频率编码：将低维的原始数值映射到高维空间，让神经网络更容易学习到数据中的高频细节
         # tensor shape: [B, N, C]
         B, N, C = tensor.shape
         F = self.num_encoding_functions
 
-        # 1. 计算乘法: [B, N, C, 1] * [F] -> [B, N, C, F]
-        x = tensor.unsqueeze(-1) * self.frequency_bands
+        # 1. 计算乘法: [B, N, C, 1] * [F] -> [B, N, C, F] # todo (1 3600 13 1) * (6) -> (1 3600 13 6)
+        x = tensor.unsqueeze(-1) * self.frequency_bands # todo self.frequency_bands: 预设的频率 将输入值乘以一系列预设的频率[1,2,4,8,16,32]  (1 3600 13 6)
 
         # 2. 计算 sin 和 cos: [B, N, C, F]
         sin_enc = torch.sin(x)
@@ -111,12 +111,12 @@ class NerfPositionalEncoder(nn.Module):
         # 3. 关键修正：为了匹配原始循环顺序 [freq, func, channel]
         # 原始顺序是：对每个 freq，先算所有通道的 sin，再算所有通道的 cos
         # 我们先 stack 得到 [B, N, C, F, 2] (2 分别是 sin 和 cos)
-        enc = torch.stack([sin_enc, cos_enc], dim=-1)  # [B, N, C, F, 2]
+        enc = torch.stack([sin_enc, cos_enc], dim=-1)  # [B, N, C, F, 2] # todo (1 3600 13 6 2)
 
         # 调整维度顺序以匹配原始循环:
         # 原始循环: F -> func(2) -> C
         # 所以目标 shape 顺序应该是 [B, N, F, 2, C]
-        enc = enc.permute(0, 1, 3, 4, 2).reshape(B, N, -1)
+        enc = enc.permute(0, 1, 3, 4, 2).reshape(B, N, -1) # todo (1 3600 156)
 
         if self.include_input:
             return torch.cat([tensor, enc], dim=-1)

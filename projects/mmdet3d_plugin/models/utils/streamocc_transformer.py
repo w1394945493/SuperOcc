@@ -64,7 +64,7 @@ class StreamOccTransformer(BaseModule):
         cls_scores = [torch.nan_to_num(score) for score in cls_scores]
         refine_pts = [torch.nan_to_num(pts) for pts in refine_pts]
 
-        return query_feats, cls_scores, refine_pts
+        return query_feats, cls_scores, refine_pts # todo 6层：query_feats[0]:(1 3600 256) cls_scores[0]:(1 3600 1 17) refine_pts[0]:(1 3600 1 13)
 
 
 class SuperOccTransformerDecoder(BaseModule):
@@ -130,7 +130,7 @@ class SuperOccTransformerDecoder(BaseModule):
         # group image features in advance for sampling, see `sampling_4d` for more details
         for lvl, feat in enumerate(mlvl_feats):
             B, TN, GC, H, W = feat.shape  # (B, T*N_view, GC, fH, fW)
-            N, T, G, C = self.num_views, self.num_frames, self.num_groups, GC//self.num_groups
+            N, T, G, C = self.num_views, self.num_frames, self.num_groups, GC//self.num_groups # todo 6 8 4 256/4=64
             assert T*N == TN
             # (B, N, C=256, H2, W2) --> (B, T, N_view, G, C, fH, fW)
             feat = feat.reshape(B, T, N, G, C, H, W)
@@ -149,10 +149,10 @@ class SuperOccTransformerDecoder(BaseModule):
             mlvl_feats[lvl] = feat.contiguous()
         # mlvl_feats: List[(B*T*G, N_view, H2, W2, C), (B*T*G, N_view, H2, W2, C), ...]
 
-        for i, decoder_layer in enumerate(self.decoder_layers):
+        for i, decoder_layer in enumerate(self.decoder_layers): # todo 6层
             DUMP.stage_count = i
 
-            query_points = query_points.detach()
+            query_points = query_points.detach() # todo (1 3600 1 3)
             # query_feat: (B, N_query, N_refine, C)
             # cls_score:  (B, N_query, N_refine, n_cls)
             # refine_sqs: (B, N_query, N_refine, 13)
@@ -294,7 +294,7 @@ class SuperOccTransformerDecoderLayer(BaseModule):
             refine_pt:  (B, N_query, N_refine, 3)
         """
         # (B, N_query, N_refine*3) --> (B, N_query, C)
-        query_pos = self.position_encoder(query_points.flatten(2, 3))
+        query_pos = self.position_encoder(query_points.flatten(2, 3)) # todo (1 3600 3) -> (1 3600 256)
 
         sampled_feat = self.sampling(
             query_feat,  # (B, N_query, C)
@@ -309,7 +309,7 @@ class SuperOccTransformerDecoderLayer(BaseModule):
         query_feat = self.norm3(self.ffn(query_feat))   # (B, N_query, C)
 
         B, Q = query_points.shape[:2]
-        cls_score = self.cls_branch(query_feat)   # (B, N_query, n_refine * n_cls)
+        cls_score = self.cls_branch(query_feat)   # (B, N_query, n_refine * n_cls) # todo (1 3600 17)
         reg_offset = self.reg_branch(query_feat)  # (B, N_query, n_refine * 13)
         reg_offset = reg_offset.reshape(B, Q, self.num_refines, -1)     # (B, N_query, n_refine, 13)
         reg_offset = self.scale(reg_offset)
@@ -434,7 +434,7 @@ class SuperOccSampling(BaseModule):
         Returns:
             sampled_feats: (B, N_query, n_group, T*n_points, C)
         '''
-        query_feat = query_feat + query_pos
+        query_feat = query_feat + query_pos # todo (1 3600 256)
         B, Q = query_points.shape[:2]
         image_h, image_w, _ = img_metas[0]['img_shape'][0]
 
@@ -480,7 +480,7 @@ class SuperOccSampling(BaseModule):
             self.num_views
         )  # (B, N_query, n_group, T*n_points, C)
 
-        return sampled_feats
+        return sampled_feats # todo (1 3600 4 16 64)
 
     def forward(self, query_feat, query_pos, query_points, mlvl_feats, occ2img, img_metas):
         if self.training and query_feat.requires_grad:
