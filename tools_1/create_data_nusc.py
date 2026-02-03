@@ -11,8 +11,12 @@ from pyquaternion import Quaternion
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--data-root', default='data/nuscenes')
+parser.add_argument('--out-dir', default='data/nuscenes/processed_infos')
 parser.add_argument('--version', default='v1.0-trainval')
 args = parser.parse_args()
+
+if not os.path.exists(args.out_dir):
+    os.makedirs(args.out_dir)
 
 
 def get_cam_info(nusc, sample_data):
@@ -96,25 +100,25 @@ if __name__ == '__main__':
     if args.version == 'v1.0-trainval':
         sample_infos = pickle.load(open(os.path.join(args.data_root, 'nuscenes_infos_train.pkl'), 'rb'))
         sample_infos = add_sweep_info(nusc, sample_infos)
-        mmcv.dump(sample_infos, os.path.join(args.data_root, 'nuscenes_infos_train_sweep.pkl'))
+        mmcv.dump(sample_infos, os.path.join(args.out_dir, 'nuscenes_infos_train_sweep.pkl'))
 
         sample_infos = pickle.load(open(os.path.join(args.data_root, 'nuscenes_infos_val.pkl'), 'rb'))
         sample_infos = add_sweep_info(nusc, sample_infos)
-        mmcv.dump(sample_infos, os.path.join(args.data_root, 'nuscenes_infos_val_sweep.pkl'))
+        mmcv.dump(sample_infos, os.path.join(args.out_dir, 'nuscenes_infos_val_sweep.pkl'))
 
     elif args.version == 'v1.0-test':
         sample_infos = pickle.load(open(os.path.join(args.data_root, 'nuscenes_infos_test.pkl'), 'rb'))
         sample_infos = add_sweep_info(nusc, sample_infos)
-        mmcv.dump(sample_infos, os.path.join(args.data_root, 'nuscenes_infos_test_sweep.pkl'))
+        mmcv.dump(sample_infos, os.path.join(args.out_dir, 'nuscenes_infos_test_sweep.pkl'))
 
     elif args.version == 'v1.0-mini':
         sample_infos = pickle.load(open(os.path.join(args.data_root, 'nuscenes_infos_train_mini.pkl'), 'rb'))
         sample_infos = add_sweep_info(nusc, sample_infos)
-        mmcv.dump(sample_infos, os.path.join(args.data_root, 'nuscenes_infos_train_mini_sweep.pkl'))
+        mmcv.dump(sample_infos, os.path.join(args.out_dir, 'nuscenes_infos_train_mini_sweep.pkl'))
 
         sample_infos = pickle.load(open(os.path.join(args.data_root, 'nuscenes_infos_val_mini.pkl'), 'rb'))
         sample_infos = add_sweep_info(nusc, sample_infos)
-        mmcv.dump(sample_infos, os.path.join(args.data_root, 'nuscenes_infos_val_mini_sweep.pkl'))
+        mmcv.dump(sample_infos, os.path.join(args.out_dir, 'nuscenes_infos_val_mini_sweep.pkl'))
 
     else:
         raise ValueError
