@@ -33,7 +33,7 @@ def get_cam_info(nusc, sample_data):
     sensor2global_translation = ego2global_rotation @ sensor2ego_translation + ego2global_translation
 
     return {
-        'data_path': os.path.join(args.data_root, sample_data['filename']),
+        'data_path': os.path.join(args.data_root, sample_data['filename']), # SuperOcc中对图像数据路径修改过了
         'sensor2global_rotation': sensor2global_rotation,
         'sensor2global_translation': sensor2global_translation,
         # 'sensor2ego_rotation': sensor2ego_rotation,
@@ -61,12 +61,14 @@ def add_sweep_info(nusc, sample_infos):
         curr_cams = dict()
         for cam in cam_types:
             curr_cams[cam] = nusc.get('sample_data', sample['data'][cam])
-
+        
+        # todo 计算相机在世界坐标系里的绝对位置
         for cam in cam_types:
             sample_data = nusc.get('sample_data', sample['data'][cam])
             sweep_cam = get_cam_info(nusc, sample_data)
             sample_infos['infos'][curr_id]['cams'][cam].update(sweep_cam)
-
+        
+        # todo 增加中间帧的时序信息
         sweep_infos = []
         if sample['prev'] != '':  # add sweep frame between two key frame
             for _ in range(5):
@@ -88,6 +90,9 @@ def add_sweep_info(nusc, sample_infos):
         scene = nusc.get('scene', sample['scene_token'])
         sample_infos['infos'][curr_id]['scene_token'] = sample['scene_token']
         sample_infos['infos'][curr_id]['scene_name'] = scene['name']
+        
+        # todo-----------------------------------------------------#
+        # todo 给每一帧增加了占据预测标注路径
         sample_infos['infos'][curr_id]['occ_path'] = \
             './data/nuscenes/gts/%s/%s/labels.npz' % (scene['name'], sample_infos['infos'][curr_id]['token'])
 

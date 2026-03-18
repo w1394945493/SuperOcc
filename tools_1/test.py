@@ -4,8 +4,8 @@
 #  Modified by Zhiqi Li
 # ---------------------------------------------
 
-from setproctitle import setproctitle
-setproctitle("wys")
+# from setproctitle import setproctitle
+# setproctitle("wys")
 
 
 import argparse

@@ -28,7 +28,10 @@ class NuScenesDatasetSurroundOcc(NuScenesDataset):
 
         self.occ_gt = occ_gt
         self.data_infos = self.load_annotations(self.ann_file)
-        # self.data_infos = self.data_infos[:5] #!! 只取前5个
+        # todo ----------------------------------#
+        # todo 只取5个
+        self.data_infos = self.data_infos[::80][:5] 
+
         self.adj_list = adj_list
 
         if seq_mode:
@@ -167,7 +170,8 @@ class NuScenesDatasetSurroundOcc(NuScenesDataset):
         #     ))
         # todo-----------------------------------------------------------------------------------#
         input_dict['occ_gt_path'] = os.path.join(self.occ_gt, 'surroundocc', 'samples')
-
+        # input_dict['occ_gt_path'] = self.occ_gt
+        
         if self.modality['use_camera']:
             img_paths = []
             img_timestamps = []
@@ -180,7 +184,9 @@ class NuScenesDatasetSurroundOcc(NuScenesDataset):
 
             for _, cam_info in info['cams'].items():
                 cam_names.append(cam_info['type'])
-                img_paths.append(os.path.relpath(cam_info['data_path']))
+                img_paths.append(os.path.relpath(cam_info['data_path'])) # SuperOcc重新生成了数据集路径
+                
+                
                 img_timestamps.append(cam_info['timestamp'] / 1e6)
 
                 cam2lidar_r = cam_info['sensor2lidar_rotation']
@@ -272,7 +278,9 @@ class NuScenesDatasetSurroundOcc(NuScenesDataset):
         from tqdm import tqdm
         for i in tqdm(range(len(occ_results))):
             info = self.data_infos[i]
+            # 评估阶段
             occ_gt_path = os.path.join(self.occ_gt, 'surroundocc', 'samples')
+            # occ_gt_path = self.occ_gt
             occ_gt_path = os.path.join(occ_gt_path, info['lidar_path'].split('/')[-1] + '.npy')
             label = np.load(occ_gt_path)
             occ_labels = np.ones((200, 200, 16), dtype=np.int64) * 17

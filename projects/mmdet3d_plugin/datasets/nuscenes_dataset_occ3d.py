@@ -158,7 +158,7 @@ class NuScenesDatasetOcc3D(NuScenesDataset):
         #         lidar_sweeps={'prev': lidar_sweeps_prev, 'next': lidar_sweeps_next},
         #     ))
 
-        input_dict['occ_gt_path'] = info['occ_path']
+        input_dict['occ_gt_path'] = info['occ_path'] # occ3d的gt路径
 
         if self.modality['use_camera']:
             img_paths = []

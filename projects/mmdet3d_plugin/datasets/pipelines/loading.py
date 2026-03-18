@@ -170,7 +170,7 @@ class LoadMultiViewImageFromMultiSweeps:
 
 
 @PIPELINES.register_module()
-class LoadOccGTFromFile(object):
+class LoadOccGTFromFile(object): # Occ3d
     def __init__(self, num_classes=18):
         self.num_classes = num_classes
 
@@ -194,10 +194,10 @@ class LoadOccGTFromFile(object):
 
 
 @PIPELINES.register_module()
-class LoadOccupancySurroundOcc(object):
+class LoadOccupancySurroundOcc(object): # SurroundOcc
     def __call__(self, results):
         occ_gt_path = results['occ_gt_path']
-        occ_gt_path = os.path.join(occ_gt_path, results['pts_filename'].split('/')[-1]+'.npy')
+        occ_gt_path = os.path.join(occ_gt_path, results['pts_filename'].split('/')[-1]+'.npy') # surroundocc gt
 
         label = np.load(occ_gt_path)
         new_label = np.ones((200, 200, 16), dtype=np.int64) * 17

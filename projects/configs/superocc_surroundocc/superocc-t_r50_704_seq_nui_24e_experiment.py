@@ -1,8 +1,8 @@
 _base_ = [
     # '../../../mmdetection3d/configs/_base_/datasets/nus-3d.py',
     # '../../../mmdetection3d/configs/_base_/default_runtime.py'
-    "/home/lianghao/wangyushen/Projects/SuperOcc/projects/configs/_base_/datasets/nus-3d.py",
-    "/home/lianghao/wangyushen/Projects/SuperOcc/projects/configs/_base_/default_runtime.py",
+    "/vepfs-mlp2/c20250502/haoce/wangyushen/SuperOcc/projects/configs/_base_/datasets/nus-3d.py",
+    "/vepfs-mlp2/c20250502/haoce/wangyushen/SuperOcc/projects/configs/_base_/default_runtime.py",
 
 ]
 plugin=True
@@ -17,18 +17,18 @@ v_range = [0.1, 2]
 # arch config
 embed_dims = 256
 num_layers = 6
-num_query = 3600
-memory_len = 3000
-topk_proposals = 3000
-num_propagated = 3000
+num_query = 600
+memory_len = 500
+topk_proposals = 500
+num_propagated = 500
 
 prop_query = True
 temp_fusion = True
 with_ego_pos = True
 num_frames = 8
 num_levels = 4
-num_points = 2
-num_refines = [1, 1, 2, 2, 4, 4]
+num_points = 4
+num_refines = [2, 2, 4, 4, 8, 8]
 
 img_norm_cfg = dict(
     mean=[123.675, 116.28, 103.53], std=[58.395, 57.12, 57.375], to_rgb=True)
@@ -45,12 +45,8 @@ occ_names = [
      'vegetation'
 ]
 
-# num_gpus = 4
-# batch_size = 2
-num_gpus = 1
-batch_size = 1
-workers_per_gpu=0
-
+num_gpus = 4
+batch_size = 2
 num_iters_per_epoch = 28130 // (num_gpus * batch_size)
 num_epochs = 24
 num_epochs_single_frame = 2
@@ -135,9 +131,13 @@ model = dict(
 )
 
 
-dataset_type = 'NuScenesDatasetSurroundOcc' # Surroundocc
-data_root = '/home/lianghao/wangyushen/data/wangyushen/Datasets/data/v1.0-trainval/'
-occ_gt = '/home/lianghao/wangyushen/data/wangyushen/Datasets/data'
+dataset_type = 'NuScenesDatasetSurroundOcc'
+data_root = '/c20250502/wangyushen/Datasets/NuScenes/v1.0-trainval/v1.0-trainval/'
+ann_root = '/c20250502/wangyushen/Datasets/NuScenes/method/superocc/'
+occ_gt = '/c20250502/wangyushen/Datasets/'
+
+train_ann = ann_root + 'nuscenes_infos_train_sweep.pkl'
+val_ann = ann_root + 'nuscenes_infos_val_sweep.pkl'
 
 
 file_client_args = dict(backend='disk')
@@ -191,12 +191,13 @@ test_pipeline = [
 
 data = dict(
     samples_per_gpu=batch_size,
-    workers_per_gpu=workers_per_gpu,
+    workers_per_gpu=4,
     train=dict(
         type=dataset_type,
         data_root=data_root,
         # ann_file=data_root + 'nuscenes_infos_train_sweep.pkl',
-        ann_file = '/home/lianghao/wangyushen/data/wangyushen/Datasets/data/nusc_annos/superocc/nuscenes_infos_train_sweep.pkl',
+        ann_file = train_ann,
+        occ_gt=occ_gt,
         seq_split_num=1, # streaming video training
         seq_mode=seq_mode, # streaming video training
         pipeline=train_pipeline,
@@ -206,18 +207,18 @@ data = dict(
         use_valid_flag=True,
         filter_empty_gt=False,
         box_type_3d='LiDAR'),
-    val=dict(type=dataset_type, pipeline=test_pipeline,
-            #  ann_file=data_root + 'nuscenes_infos_val_sweep.pkl',
-             data_root=data_root,
-             occ_gt=occ_gt,
-             ann_file='/home/lianghao/wangyushen/data/wangyushen/Datasets/data/nusc_annos/superocc/nuscenes_infos_val_sweep.pkl',
-             classes=object_names, modality=input_modality),
-    test=dict(type=dataset_type, pipeline=test_pipeline,
-            #   ann_file=data_root + 'nuscenes_infos_val_sweep.pkl',
-              data_root=data_root,
-              occ_gt=occ_gt,
-              ann_file='/home/lianghao/wangyushen/data/wangyushen/Datasets/data/nusc_annos/superocc/nuscenes_infos_val_sweep.pkl',
-              classes=object_names, modality=input_modality),
+    val=dict(
+        type=dataset_type, 
+        pipeline=test_pipeline, 
+        # ann_file=data_root + 'nuscenes_infos_val_sweep.pkl', 
+        ann_file=val_ann,
+        occ_gt=occ_gt,
+        classes=object_names, modality=input_modality),
+    test=dict(type=dataset_type, pipeline=test_pipeline, 
+        # ann_file=data_root + 'nuscenes_infos_val_sweep.pkl', 
+        ann_file=val_ann,
+        occ_gt=occ_gt,
+        classes=object_names, modality=input_modality),
     shuffler_sampler=dict(
         type='InfiniteGroupEachSampleInBatchSampler',
         seq_split_num=2,
@@ -263,27 +264,27 @@ resume_from=None
 
 # ===> per class IoU of 6019 samples:
 # ===> noise - IoU = nan
-# ===> barrier - IoU = 23.92
-# ===> bicycle - IoU = 12.43
-# ===> bus - IoU = 29.77
-# ===> car - IoU = 33.62
-# ===> construction_vehicle - IoU = 17.36
-# ===> motorcycle - IoU = 17.74
-# ===> pedestrian - IoU = 14.95
-# ===> traffic_cone - IoU = 14.79
-# ===> trailer - IoU = 13.42
-# ===> truck - IoU = 26.25
-# ===> driveable_surface - IoU = 48.22
-# ===> other_flat - IoU = 29.22
-# ===> sidewalk - IoU = 32.16
-# ===> terrain - IoU = 30.2
-# ===> manmade - IoU = 18.67
-# ===> vegetation - IoU = 30.04
-# ===> mIoU of 6019 samples: 24.55
+# ===> barrier - IoU = 21.35
+# ===> bicycle - IoU = 11.9
+# ===> bus - IoU = 28.35
+# ===> car - IoU = 32.12
+# ===> construction_vehicle - IoU = 15.46
+# ===> motorcycle - IoU = 15.84
+# ===> pedestrian - IoU = 13.2
+# ===> traffic_cone - IoU = 11.83
+# ===> trailer - IoU = 11.87
+# ===> truck - IoU = 23.71
+# ===> driveable_surface - IoU = 47.3
+# ===> other_flat - IoU = 29.19
+# ===> sidewalk - IoU = 30.29
+# ===> terrain - IoU = 28.22
+# ===> manmade - IoU = 13.23
+# ===> vegetation - IoU = 25.75
+# ===> mIoU of 6019 samples: 22.48
 #
 # Starting Evaluation...
-# 100%|███████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 6019/6019 [01:29<00:00, 67.23it/s]
+# 100%|███████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 6019/6019 [01:36<00:00, 62.20it/s]
 # ===> per class IoU of 6019 samples:
-# ===> non-free - IoU = 38.13
-# ===> mIoU of 6019 samples: 38.13
-# {'mIoU': 24.55, 'binary_mIoU': 38.13}
+# ===> non-free - IoU = 34.91
+# ===> mIoU of 6019 samples: 34.91
+# {'mIoU': 22.48, 'binary_mIoU': 34.91}
