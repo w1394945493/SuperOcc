@@ -16,6 +16,32 @@
             ],
             "console": "integratedTerminal",
             // "justMyCode": false,
-        }
+        },
+        {
+            "name": "superocc test(experiment)(surroundocc)",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "/vepfs-mlp2/c20250502/haoce/wangyushen/SuperOcc/tools_1/test.py",
+            "args": [
+                "/vepfs-mlp2/c20250502/haoce/wangyushen/SuperOcc/projects/configs/superocc_surroundocc/superocc-t_r50_704_seq_nui_24e_experiment.py",
+                "/c20250502/wangyushen/Weights/superocc/superocc-t_r50_704_seq_nui_24e.pth",
+                "--eval=bbox",
+            ],
+            "console": "integratedTerminal",
+            "justMyCode": false,
+        },
+        {
+            "name": "viz prediction",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "/vepfs-mlp2/c20250502/haoce/wangyushen/SuperOcc/tools_1/viz_prediction.py",
+            "args": [
+                "/vepfs-mlp2/c20250502/haoce/wangyushen/SuperOcc/projects/configs/superocc_surroundocc/superocc-t_r50_704_seq_nui_24e_experiment.py",
+                "/c20250502/wangyushen/Weights/superocc/superocc-t_r50_704_seq_nui_24e.pth",
+                "--eval=bbox",
+            ],
+            "console": "integratedTerminal",
+            "justMyCode": false,
+        },        
     ]
 }

@@ -214,7 +214,7 @@ class LoadOccupancySurroundOcc(object): # SurroundOcc
             new_label = torch.flip(new_label, [1])
             mask_camera = torch.flip(mask_camera, [1])
 
-        results['voxel_semantics'] = new_label
+        results['voxel_semantics'] = new_label # voxel_semantics
         results['mask_camera'] = mask_camera
 
         return results

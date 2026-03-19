@@ -154,7 +154,7 @@ class SuperOCC(MVXTwoStageDetector):
         list[list[dict]]), with the outer list indicating test time
         augmentations.
         """
-        if return_loss:
+        if return_loss:  # data['img'][0].shape: (1 6 3 256 704)
             return self.forward_train(**data)
         else:
             return self.forward_test(**data)
@@ -212,8 +212,10 @@ class SuperOCC(MVXTwoStageDetector):
         else:
             data['prev_exists'] = data['img'].new_ones(1)
 
+        # todo ----------------------------------------- #
+        # todo offline 和 online
         world_size = get_dist_info()[1]
-        if world_size == 1:  # online
+        if world_size == 1:  # online #------------------#
             return self.simple_test_online(img_metas, **data)
         else:  # offline
             return self.simple_test_offline(img_metas, **data)
@@ -290,6 +292,3 @@ class SuperOCC(MVXTwoStageDetector):
 
         # run occupancy predictor
         return self.simple_test_pts(img_metas, **data)
-
-
-

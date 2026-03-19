@@ -20,9 +20,17 @@ class NuScenesDatasetOcc3D(NuScenesDataset):
     This datset only add camera intrinsics and extrinsics to the results.
     """
 
-    def __init__(self, seq_mode=False, seq_split_num=1, adj_list=[], *args, **kwargs):
+    def __init__(
+        self, occ_gt="", seq_mode=False, seq_split_num=1, adj_list=[], *args, **kwargs
+    ):
         super().__init__(*args, **kwargs)
+        self.occ_gt = occ_gt
         self.data_infos = self.load_annotations(self.ann_file)
+
+        # todo ----------------------------------#
+        # todo 只取5个
+        self.data_infos = self.data_infos[::80][:5]
+
         self.adj_list = adj_list
 
         if seq_mode:
@@ -158,7 +166,9 @@ class NuScenesDatasetOcc3D(NuScenesDataset):
         #         lidar_sweeps={'prev': lidar_sweeps_prev, 'next': lidar_sweeps_next},
         #     ))
 
-        input_dict['occ_gt_path'] = info['occ_path'] # occ3d的gt路径
+        # input_dict['occ_gt_path'] = info['occ_path'] # occ3d的gt路径
+        occ_path = info["occ_path"].replace("./data/nuscenes/", self.occ_gt)
+        input_dict['occ_gt_path'] = occ_path
 
         if self.modality['use_camera']:
             img_paths = []
@@ -238,7 +248,10 @@ class NuScenesDatasetOcc3D(NuScenesDataset):
         from tqdm import tqdm
         for i in tqdm(range(len(occ_results))):
             info = self.data_infos[i]
-            occ_file = info['occ_path']
+            occ_file = info["occ_path"].replace("./data/nuscenes/", self.occ_gt)
+            # print(info["occ_path"])
+            # print(self.occ_gt)
+            # print(occ_file)
             occ_infos = np.load(occ_file)
 
             occ_labels = occ_infos['semantics']
@@ -258,7 +271,7 @@ class NuScenesDatasetOcc3D(NuScenesDataset):
         from tqdm import tqdm
         for i in tqdm(range(len(occ_results))):
             info = self.data_infos[i]
-            occ_file = info['occ_path']
+            occ_file = info["occ_path"].replace("./data/nuscenes/", self.occ_gt)
             occ_infos = np.load(occ_file)
 
             occ_labels = occ_infos['semantics']
@@ -297,7 +310,7 @@ class NuScenesDatasetOcc3D(NuScenesDataset):
             data_id = sample_tokens.index(token)
             info = self.data_infos[data_id]
 
-            occ_file = info['occ_path']
+            occ_file = info["occ_path"].replace("./data/nuscenes/", self.occ_gt)
             occ_infos = np.load(occ_file)
             gt_semantics = occ_infos['semantics']
 

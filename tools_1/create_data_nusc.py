@@ -92,7 +92,7 @@ def add_sweep_info(nusc, sample_infos):
         sample_infos['infos'][curr_id]['scene_name'] = scene['name']
         
         # todo-----------------------------------------------------#
-        # todo 给每一帧增加了占据预测标注路径
+        # todo 给每一帧增加了占据预测标注路径: Occ3d的路径
         sample_infos['infos'][curr_id]['occ_path'] = \
             './data/nuscenes/gts/%s/%s/labels.npz' % (scene['name'], sample_infos['infos'][curr_id]['token'])
 

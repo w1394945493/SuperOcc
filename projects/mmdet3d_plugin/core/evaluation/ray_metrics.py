@@ -9,8 +9,23 @@ from tqdm import tqdm
 from prettytable import PrettyTable
 from .ray_pq import Metric_RayPQ
 
+# import os
+# import sys
+# sys.path.append(
+#     os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+# ))))
 
-dvr = load("dvr", sources=["lib/dvr/dvr.cpp", "lib/dvr/dvr.cu"], verbose=True, extra_cuda_cflags=['-allow-unsupported-compiler'])
+# dvr = load("dvr", sources=["lib/dvr/dvr.cpp", "lib/dvr/dvr.cu"], verbose=True, extra_cuda_cflags=['-allow-unsupported-compiler'])
+dvr = load(
+    "dvr",
+    sources=[
+        "/vepfs-mlp2/c20250502/haoce/wangyushen/SuperOcc/lib/dvr/dvr.cpp",
+        "/vepfs-mlp2/c20250502/haoce/wangyushen/SuperOcc/lib/dvr/dvr.cu",
+    ],
+    verbose=True,
+    extra_cuda_cflags=["-allow-unsupported-compiler"],
+)
+
 _pc_range = [-40, -40, -1.0, 40, 40, 5.4]
 _voxel_size = 0.4
 

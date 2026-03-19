@@ -19,7 +19,7 @@ from mmcv.parallel import MMDataParallel, MMDistributedDataParallel
 from mmcv.runner import (get_dist_info, init_dist, load_checkpoint,
                          wrap_fp16_model)
 
-from mmdet3d.apis import single_gpu_test
+from mmdet3d.apis import single_gpu_test # 使用single_gpu_test
 from mmdet3d.datasets import build_dataset
 
 
@@ -234,6 +234,7 @@ def main():
     if not distributed:
         # assert False
         model = MMDataParallel(model, device_ids=[0])
+        # todo ---------------------------------------------------------- #
         # todo 推理
         outputs = single_gpu_test(model, data_loader, args.show, args.show_dir) # todo args.show:True/False, args.show_dir:结果保存路径
     else:
@@ -253,6 +254,7 @@ def main():
         kwargs = {} if args.eval_options is None else args.eval_options
         kwargs['jsonfile_prefix'] = osp.join('test', args.config.split(
             '/')[-1].split('.')[-2], time.ctime().replace(' ', '_').replace(':', '_'))
+        # 保存结果
         if args.format_only:
             dataset.format_results(outputs, **kwargs)
 
