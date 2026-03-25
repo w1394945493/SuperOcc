@@ -300,10 +300,10 @@ class StreamOccHead(BaseModule):
             mlvl_feats,  # 4:(1 48 256 64 176) (1 48 256 32 88) (1 48 256 16 44) (1 48 256 8 22)
             data,
             img_metas=img_metas,
-        )
+        ) # query_feats: 6 -> (1 600 256)x6 cls_scores: 6 -> (1 600 n 17) refine_sqs: 6 -> (1 600 n 13) 注：T/S:n=2 2 4 4 8 8 M/L:n=1 1 2 2 4 4
 
         # =======================================================#
-        # 
+        #  
         cls_scores_list = []
         refine_sqs_list = []
         pred_occ_list = []
@@ -311,22 +311,22 @@ class StreamOccHead(BaseModule):
             if not self.training:
                 if i < (len(refine_sqs) - 1):
                     continue
-            sq_mean = decode_points(refine_sqs[i][..., 0:3], self.pc_range)  # (B, Q，N_refine, 3)
-            sq_scales = safe_sigmoid(refine_sqs[i][..., 3:6])  # (B, Q，N_refine, 3)
+            sq_mean = decode_points(refine_sqs[i][..., 0:3], self.pc_range) # (1 600 8 3) # (B, Q，N_refine, 3) pc_range: [-50 -50 -5 50 50 3]
+            sq_scales = safe_sigmoid(refine_sqs[i][..., 3:6])               # (1 600 8 3) # (B, Q，N_refine, 3)
             sq_scales = self.scale_range[0] + (
-                    self.scale_range[1] - self.scale_range[0]) * sq_scales  # (B, Q，N_refine, 3)
-            rot = refine_sqs[i][..., 6:10]  # (B, Q，N_refine, 4)
-            opa = safe_sigmoid(refine_sqs[i][..., 10:11])  # (B, Q，N_refine, 1)
-            uv = safe_sigmoid(refine_sqs[i][..., 11:13])  # (B, Q，N_refine, 2)
-            u = self.u_range[0] + (self.u_range[1] - self.u_range[0]) * uv[..., :1]  # (B, Q，N_refine, 1)
-            v = self.v_range[0] + (self.v_range[1] - self.v_range[0]) * uv[..., 1:]  # (B, Q，N_refine, 1)
-            sqs = torch.cat([sq_mean, sq_scales, rot, opa, u, v], dim=-1)
-            cls_score = cls_scores[i] # todo (1 3600 4 17)
-            refine_sqs_list.append(sqs)
+                    self.scale_range[1] - self.scale_range[0]) * sq_scales  # (1 600 8 3) # scale_range: [0.01 3.2]     # (B, Q，N_refine, 3)
+            rot = refine_sqs[i][..., 6:10]                                  # (1 600 8 4) # (B, Q，N_refine, 4)
+            opa = safe_sigmoid(refine_sqs[i][..., 10:11])                   # (1 600 8 1) # (B, Q，N_refine, 1)
+            uv = safe_sigmoid(refine_sqs[i][..., 11:13])                    # (1 600 8 2)    # (B, Q，N_refine, 2)
+            u = self.u_range[0] + (self.u_range[1] - self.u_range[0]) * uv[..., :1]  # (1 600 8 1) # u_range: [0.1 2] # (B, Q，N_refine, 1)
+            v = self.v_range[0] + (self.v_range[1] - self.v_range[0]) * uv[..., 1:]  # (1 600 8 1) # v_range: [0.1 2] (B, Q，N_refine, 1)
+            sqs = torch.cat([sq_mean, sq_scales, rot, opa, u, v], dim=-1)   # (1 600 8 13)
+            cls_score = cls_scores[i]                                       # (1 600 8 17)
+            refine_sqs_list.append(sqs)                                     
             cls_scores_list.append(cls_score)
             
             #==============================================================#
-            occ_pred = self.sq2occ(cls_score, sqs) # todo (1 200 200 16 18)
+            occ_pred = self.sq2occ(cls_score, sqs) # (1 600 n 17) (1 600 n 13) -> (1 200 200 16 18) 注：T/S：n=8 M/L：n=4
             pred_occ_list.append(occ_pred)
 
             if DUMP.enabled and i == (len(refine_sqs) - 1):
@@ -358,28 +358,28 @@ class StreamOccHead(BaseModule):
         :return:
         """
         num_imgs = cls_scores.size(0)
-        cls_scores = cls_scores.flatten(1, 2)  # (B, Q*N_refine, 17)
-        refine_sqs = refine_sqs.flatten(1, 2)  # (B, Q*N_refine, 13)
+        cls_scores = cls_scores.flatten(1, 2)   # (1 4800 17)  # (B, Q*N_refine, 17)
+        refine_sqs = refine_sqs.flatten(1, 2)   # (1 4800 13) # (B, Q*N_refine, 13)
 
-        gs_mean = refine_sqs[..., :3]  # (B, Q*N_refine, 3)
-        scales = refine_sqs[..., 3:6]  # (B, Q*N_refine, 3)
-        rot = refine_sqs[..., 6:10]  # (B, Q*N_refine, 4)
-        origi_opa = refine_sqs[..., 10:11]  # (B, Q*N_refine, 1)
-        u = refine_sqs[..., 11:12]  # (B, Q*N_refine, 1)
-        v = refine_sqs[..., 12:13]  # (B, Q*N_refine, 1)
+        gs_mean = refine_sqs[..., :3]            # (1 4800 3)  # (B, Q*N_refine, 3)
+        scales = refine_sqs[..., 3:6]            # (1 4800 3)  # (B, Q*N_refine, 3)
+        rot = refine_sqs[..., 6:10]              # (1 4800 4)  # (B, Q*N_refine, 4)
+        origi_opa = refine_sqs[..., 10:11]       # (1 4800 1)  # (B, Q*N_refine, 1)
+        u = refine_sqs[..., 11:12]               # (1 4800 1)  # (B, Q*N_refine, 1)
+        v = refine_sqs[..., 12:13]               # (1 4800 1)  # (B, Q*N_refine, 1)
 
-        rots = get_rotation_matrix(rot)  # (B, Q*N_refine, 4, 4)
-        origi_opa = origi_opa.flatten(1, 2)  # (B, Q*N_refine)
-        u = u.flatten(1, 2)  # (B, Q*N_refine)
-        v = v.flatten(1, 2)  # (B, Q*N_refine)
+        rots = get_rotation_matrix(rot)          # (1 4800 3 3)  # (B, Q*N_refine, 4, 4)
+        origi_opa = origi_opa.flatten(1, 2)      # (1 4800)  # (B, Q*N_refine)
+        u = u.flatten(1, 2)                      # (1 4800)  # (B, Q*N_refine)
+        v = v.flatten(1, 2)                      # (1 4800)  # (B, Q*N_refine)
 
-        opacities = cls_scores.softmax(dim=-1)  # (B, Q*N_refine, sem_dim=17)
-        # opacities = torch.sigmoid(cls_scores)  # (B, Q*N_refine, sem_dim=17)
+        opacities = cls_scores.softmax(dim=-1)   # (1 4800 17)       # (B, Q*N_refine, sem_dim=17)
+        # opacities = torch.sigmoid(cls_scores)                      # (B, Q*N_refine, sem_dim=17)
         opacities = torch.cat([opacities, torch.zeros_like(opacities[..., :1])],
-                              dim=-1)  # (B, Q*N_refine, sem_dim=18),  18:(cls0, cls1, ..., free)
+                              dim=-1)            # (1 4800 18)       # (B, Q*N_refine, sem_dim=18),  18:(cls0, cls1, ..., free)
 
-        gt_xyz = self.gt_xyz[None, ...].repeat([num_imgs, 1, 1, 1, 1])
-        sampled_xyz = gt_xyz.flatten(1, 3).float()  # (B, Dx*Dy*Dz, 3)
+        gt_xyz = self.gt_xyz[None, ...].repeat([num_imgs, 1, 1, 1, 1]) # (1 200 200 16 3)
+        sampled_xyz = gt_xyz.flatten(1, 3).float()                     # (1 640000 3)                    # (B, Dx*Dy*Dz, 3)
 
         import time
         semantics = []
@@ -388,23 +388,23 @@ class StreamOccHead(BaseModule):
             # bin_logits: (Dx*Dy*Dz, )
             # density: (Dx*Dy*Dz, )
             semantic = self.aggregator(
-                sampled_xyz[i:(i + 1)],
-                gs_mean[i:(i + 1)],
-                origi_opa[i:(i + 1)],
-                u[i:(i + 1)],
-                v[i:(i + 1)],
-                opacities[i:(i + 1)],
-                scales[i:(i + 1)],
-                rots[i:(i + 1)])
-
-            sem = semantic[0][:, :-1] * semantic[1].unsqueeze(-1)  # (Dx*Dy*Dz, 17)
-            geo = 1 - semantic[1].unsqueeze(-1)  # (Dx*Dy*Dz, 1),  empty_prop
-            geosem = torch.cat([sem, geo], dim=-1)  # (Dx*Dy*Dz, 18), 18: (cls0, cls1, ..., empty)
-            geosem = geosem.reshape(self.voxel_num[0], self.voxel_num[1], self.voxel_num[2], -1)
+                sampled_xyz[i:(i + 1)], # (1 640000 3)
+                gs_mean[i:(i + 1)],     # (1 4800 3)
+                origi_opa[i:(i + 1)],   # (1 4800)
+                u[i:(i + 1)],           # (1 4800)
+                v[i:(i + 1)],           # (1 4800)
+                opacities[i:(i + 1)],   # (1 4800 18)
+                scales[i:(i + 1)],      # (1 4800 3)
+                rots[i:(i + 1)])        # (1 4800 3 3) -> tuple:(640000 18) (640000) (640000)
+            #======================================================#
+            # 
+            sem = semantic[0][:, :-1] * semantic[1].unsqueeze(-1) # (640000)       # (Dx*Dy*Dz, 17)
+            geo = 1 - semantic[1].unsqueeze(-1)                   # (640000 1)     # (Dx*Dy*Dz, 1),  empty_prop
+            geosem = torch.cat([sem, geo], dim=-1)                # (640000 18)  # (Dx*Dy*Dz, 18), 18: (cls0, cls1, ..., empty)
+            geosem = geosem.reshape(self.voxel_num[0], self.voxel_num[1], self.voxel_num[2], -1) # (200 200 16 18)
 
             semantics.append(geosem)
-        occ_pred = torch.stack(semantics, dim=0)  # (B, Dx*Dy*Dz, 18)
-
+        occ_pred = torch.stack(semantics, dim=0)                  # (200 200 16 18)  # (B, Dx*Dy*Dz, 18)
         return occ_pred
 
     def loss_single(self,
