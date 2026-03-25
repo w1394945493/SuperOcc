@@ -5,33 +5,20 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "superocc test",
+            "name": "test(experiment)(surroundocc)",
             "type": "debugpy",
             "request": "launch",
-            "program": "/home/lianghao/wangyushen/Projects/SuperOcc/tools_1/test.py",
+            "program": "/vepfs-mlp2/c20250502/haoce/wangyushen/SuperOcc/tools_1/test.py",
             "args": [
-                "/home/lianghao/wangyushen/Projects/SuperOcc/projects/configs/superocc_surroundocc/superocc-l_r50_704_seq_nui_24e_custom.py",
-                "/home/lianghao/wangyushen/data/wangyushen/Weights/superocc/superocc-l_r50_704_seq_nui_24e.pth",
+                "/vepfs-mlp2/c20250502/haoce/wangyushen/SuperOcc/projects/configs/superocc_surroundocc/superocc-t_r50_704_seq_nui_24e_experiment.py",
+                "/c20250502/wangyushen/Weights/superocc/surroundocc/superocc-t_r50_704_seq_nui_24e.pth",
                 "--eval=bbox",
             ],
             "console": "integratedTerminal",
             // "justMyCode": false,
         },
         {
-            "name": "superocc test(experiment)(surroundocc)",
-            "type": "debugpy",
-            "request": "launch",
-            "program": "/vepfs-mlp2/c20250502/haoce/wangyushen/SuperOcc/tools_1/test.py",
-            "args": [
-                "/vepfs-mlp2/c20250502/haoce/wangyushen/SuperOcc/projects/configs/superocc_surroundocc/superocc-t_r50_704_seq_nui_24e_experiment.py",
-                "/c20250502/wangyushen/Weights/superocc/superocc-t_r50_704_seq_nui_24e.pth",
-                "--eval=bbox",
-            ],
-            "console": "integratedTerminal",
-            "justMyCode": false,
-        },
-        {
-            "name": "viz prediction",
+            "name": "viz prediction(experiment) surroundocc",
             "type": "debugpy",
             "request": "launch",
             "program": "/vepfs-mlp2/c20250502/haoce/wangyushen/SuperOcc/tools_1/viz_prediction.py",
@@ -41,7 +28,7 @@
                 "--eval=bbox",
             ],
             "console": "integratedTerminal",
-            "justMyCode": false,
+            // "justMyCode": false,
         },        
     ]
 }

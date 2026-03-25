@@ -256,6 +256,9 @@ def main():
                 occ_pred=occ_pred,
                 occ_gt=occ_gt,
             )   
+
+            #==================================================#
+            # 保存结果
             # save_dir = "/c20250502/wangyushen/Outputs/superocc/outputs/vis/occ_pred"
             save_dir = "/c20250502/wangyushen/Outputs/superocc/outputs/vis2/occ_pred"
             os.makedirs(save_dir,exist_ok=True)

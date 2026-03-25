@@ -61,7 +61,7 @@ class StreamOccTransformer(BaseModule):
         query_feats, cls_scores, refine_pts = self.decoder(
             query_feat, query_points, temp_memory, temp_reference_points, memory_mask, mlvl_feats, data, img_metas)
 
-        cls_scores = [torch.nan_to_num(score) for score in cls_scores]
+        cls_scores = [torch.nan_to_num(score) for score in cls_scores] # torch.nan_to_num: 将 NaN / ±Inf替换成正常值
         refine_pts = [torch.nan_to_num(pts) for pts in refine_pts]
 
         return query_feats, cls_scores, refine_pts # todo 6层：query_feats[0]:(1 3600 256) cls_scores[0]:(1 3600 1 17) refine_pts[0]:(1 3600 1 13)
@@ -125,21 +125,21 @@ class SuperOccTransformerDecoder(BaseModule):
         query_feat_list = []
 
         # organize projections matrix and copy to CUDA
-        occ2img = data['ego2img'] if self.use_ego else data['lidar2img']
+        occ2img = data['ego2img'] if self.use_ego else data['lidar2img'] # (1 48 4 4)
 
         # group image features in advance for sampling, see `sampling_4d` for more details
-        for lvl, feat in enumerate(mlvl_feats):
-            B, TN, GC, H, W = feat.shape  # (B, T*N_view, GC, fH, fW)
-            N, T, G, C = self.num_views, self.num_frames, self.num_groups, GC//self.num_groups # todo 6 8 4 256/4=64
-            assert T*N == TN
+        for lvl, feat in enumerate(mlvl_feats): # 4->(1 48 256 64 176) (1 48 256 32 88) (1 48 256 16 44) (1 48 256 8 22)
+            B, TN, GC, H, W = feat.shape # 1 48 256 H W
+            N, T, G, C = self.num_views, self.num_frames, self.num_groups, GC//self.num_groups # 6 8 4 64
+            assert T*N == TN # 48 48 
             # (B, N, C=256, H2, W2) --> (B, T, N_view, G, C, fH, fW)
-            feat = feat.reshape(B, T, N, G, C, H, W)
+            feat = feat.reshape(B, T, N, G, C, H, W) # (1 8 6 4 64 64 176)
 
-            if MSMV_CUDA:  # Our CUDA operator requires channel_last
+            if MSMV_CUDA:  # Our CUDA operator requires channel_last True
                 # (B, T, N_view, G, C, fH, fW) --> (B, T, G, N_view, fH, fW, C)
-                feat = feat.permute(0, 1, 3, 2, 5, 6, 4)
+                feat = feat.permute(0, 1, 3, 2, 5, 6, 4) # (1 8 4 6 64 176 64)
                 # (B*T*G, N_view, fH, fW, C)
-                feat = feat.reshape(B*T*G, N, H, W, C)
+                feat = feat.reshape(B*T*G, N, H, W, C)   # (32 6 64 176 64)
             else:  # Torch's grid_sample requires channel_first
                 # (B, T, N_view, G, C, fH, fW) --> (B, T, G, C, N_view, fH, fW)
                 feat = feat.permute(0, 1, 3, 4, 2, 5, 6)
@@ -148,24 +148,24 @@ class SuperOccTransformerDecoder(BaseModule):
 
             mlvl_feats[lvl] = feat.contiguous()
         # mlvl_feats: List[(B*T*G, N_view, H2, W2, C), (B*T*G, N_view, H2, W2, C), ...]
-
-        for i, decoder_layer in enumerate(self.decoder_layers): # todo 6层
+        
+        for i, decoder_layer in enumerate(self.decoder_layers): #
             DUMP.stage_count = i
-
-            query_points = query_points.detach() # todo (1 3600 1 3)
+            # 从图像序列中采样特征，并聚合为统一的4D表示
+            query_points = query_points.detach() # todo (1 3600 1 3) 0-1之间
             # query_feat: (B, N_query, N_refine, C)
             # cls_score:  (B, N_query, N_refine, n_cls)
             # refine_sqs: (B, N_query, N_refine, 13)
             query_feat, cls_score, refine_sqs = decoder_layer(
-                query_feat,  # (B, N_query, C)
-                query_points,   # (B, N_query, N_refine, 3)
-                temp_memory,    # (B, Mem, C)
+                query_feat,  # (B, N_query, C) T: (1 600 256) Nq
+                query_points,   # (B, N_query, N_refine, 3) (1 600 1 3)
+                temp_memory,    # (B, Mem, C) # (1 0 256)
                 temp_reference_points,   # (B, Mem, 3)
                 memory_mask,
                 mlvl_feats,     # List[(B*T*G, N_view, H2, W2, C), (B*T*G, N_view, H2, W2, C), ...]
                 occ2img,        # (B, N=T*N_view, 4, 4)
                 img_metas
-            )
+            ) # (1 600 256) (1 600 2 17) (1 600 2 13)
 
             query_points = refine_sqs[..., :3]  # (B, N_query, N_refine, 3)
 
@@ -294,30 +294,30 @@ class SuperOccTransformerDecoderLayer(BaseModule):
             refine_pt:  (B, N_query, N_refine, 3)
         """
         # (B, N_query, N_refine*3) --> (B, N_query, C)
-        query_pos = self.position_encoder(query_points.flatten(2, 3)) # todo (1 3600 3) -> (1 3600 256)
-
+        query_pos = self.position_encoder(query_points.flatten(2, 3)) # todo (1 3600 3) -> (1 3600 256) # T:(1 600 256)
+        # 从图像序列中采样特征
         sampled_feat = self.sampling(
-            query_feat,  # (B, N_query, C)
-            query_pos,   # (B, N_query, C)
-            query_points,   # (B, N_query, N_refine, 3)
-            mlvl_feats,     # List[(B*T*G, N_view, H2, W2, C), (B*T*G, N_view, H2, W2, C), ...]
-            occ2img,        # (B, N=T*N_view, 4, 4)
+            query_feat,     # (1 600 256) 注：选取不同版本的SuperOcc(T,S,M,L) Nq分别为600 1200 2400 3600
+            query_pos,      # (1 600 256)
+            query_points,   # (1 600 1 3)
+            mlvl_feats,     # 4: (32 6 64 176 64) (32 6 32 88 64) (32 6 16 44 64) (32 6 8 22 64) 注：维度(BTG V H W C)
+            occ2img,        # (1 48 4 4) (B, N=T*N_view, 4, 4)
             img_metas
-        )   # (B, N_query, n_group, T*n_points, C)
-        query_feat = self.norm1(self.mixing(sampled_feat, query_feat, query_pos))      # (B, N_query, C)
-        query_feat = self.norm2(self.self_attn(query_feat, query_pos, query_points))  # (B, N_query, C)
-        query_feat = self.norm3(self.ffn(query_feat))   # (B, N_query, C)
+        ) # (B, N_query, n_group, T*n_points, C) T:(1 600 4 32 64) Nq=600 Ns=4采样点数量
+        query_feat = self.norm1(self.mixing(sampled_feat, query_feat, query_pos))    # (1 600 256)  # (B, N_query, C)
+        query_feat = self.norm2(self.self_attn(query_feat, query_pos, query_points)) # (1 600 256)  # (B, N_query, C)
+        query_feat = self.norm3(self.ffn(query_feat))                                # (1 600 256)               # (B, N_query, C)
 
         B, Q = query_points.shape[:2]
-        cls_score = self.cls_branch(query_feat)   # (B, N_query, n_refine * n_cls) # todo (1 3600 17)
-        reg_offset = self.reg_branch(query_feat)  # (B, N_query, n_refine * 13)
-        reg_offset = reg_offset.reshape(B, Q, self.num_refines, -1)     # (B, N_query, n_refine, 13)
-        reg_offset = self.scale(reg_offset)
+        cls_score = self.cls_branch(query_feat)                     # (1 600 17)  # (B, N_query, n_refine * n_cls) # todo (1 3600 17)
+        reg_offset = self.reg_branch(query_feat)                    # (1 600 26)  # (B, N_query, n_refine * 13)
+        reg_offset = reg_offset.reshape(B, Q, self.num_refines, -1) # (1 600 2 13)    # (B, N_query, n_refine, 13)
+        reg_offset = self.scale(reg_offset)                         # (1 600 2 13)
 
         # (B, N_query, n_refine * n_cls) --> (B, N_query, n_refine, n_cls)
         # cls_score = cls_score.reshape(B, Q, self.num_refines, self.num_classes)
-        cls_score = cls_score.unsqueeze(dim=2).repeat(1, 1, self.num_refines, 1)
-        refine_sqs = self.refine_sqs(query_points, reg_offset)    # (B, N_query, N_refine, 13)
+        cls_score = cls_score.unsqueeze(dim=2).repeat(1, 1, self.num_refines, 1)  # (1 600 2 17)
+        refine_sqs = self.refine_sqs(query_points, reg_offset)                    # (1 600 2 13) # (B, N_query, N_refine, 13)
 
         if DUMP.enabled:
             pass # TODO: enable OTR dump
@@ -447,40 +447,43 @@ class SuperOccSampling(BaseModule):
             query_center = query_points.mean(dim=2, keepdim=True)
             query_scale = query_points.std(dim=2, keepdim=True)
 
+        #===============================================#
+        # 使用线性层，预测一组采样偏移：samp
         # sampling offset of all frames
         # (B, N_query, C=256) --> (B, N_query, n_group*n_points*3=48)
-        sampling_offset = self.sampling_offset(query_feat)
+        sampling_offset = self.sampling_offset(query_feat) # (1 600 256) -> (1 600 48)
         # (B, N_query, N_group*N_points*3=48) --> (B, N_query, N_group*N_points=4x4=16, 3)
-        sampling_offset = sampling_offset.view(B, Q, -1, 3)
-
+        sampling_offset = sampling_offset.view(B, Q, -1, 3) # (1 600 16 3)      注：不同版本的SuperOcc(T,S,M,L)这里设计的采样点数量Ns也不同，分别为Ns=4 2 2 2
+        #================================================#
+        # 偏移量随后被添加到参考点，生成一组三维采样点：
         # sampling_points = query_center + sampling_offset * query_scale  # (B, N_query, N_group*N_points, 3)
-        sampling_points = query_center + sampling_offset  # (B, N_query, N_group*N_points, 3)
+        sampling_points = query_center + sampling_offset  # (1 600 16 3)        # (B, N_query, N_group*N_points, 3) 
         # (B, N_query, N_group*N_points, 3) --> (B, N_query, N_group=4, N_points=4, 3)
-        sampling_points = sampling_points.view(B, Q, self.num_groups, self.num_points, 3)
+        sampling_points = sampling_points.view(B, Q, self.num_groups, self.num_points, 3) # (1 600 4 4 3)
         # (B, N_query, N_group=4, N_points=4, 3) --> (B, N_query, 1, N_group=4, N_points=4, 3)
-        sampling_points = sampling_points.reshape(B, Q, 1, self.num_groups, self.num_points, 3)
+        sampling_points = sampling_points.reshape(B, Q, 1, self.num_groups, self.num_points, 3) # (1 600 1 4 4 3)
         # (B, N_query, 1, N_group=4, N_points=4, 3) --> (B, N_query, T, N_group=4, N_points=4, 3)
-        sampling_points = sampling_points.expand(B, Q, self.num_frames, self.num_groups, self.num_points, 3)
+        sampling_points = sampling_points.expand(B, Q, self.num_frames, self.num_groups, self.num_points, 3) # (1 600 8 4 4 3)
 
         # scale weights
         # (B, N_query, C=256) --> (B, N_query, n_group*n_points*n_levels)
         # --> (B, N_query, n_group, 1, n_points, n_levels)
-        scale_weights = self.scale_weights(query_feat).view(B, Q, self.num_groups, 1, self.num_points, self.num_levels)
+        scale_weights = self.scale_weights(query_feat).view(B, Q, self.num_groups, 1, self.num_points, self.num_levels) # (1 600 4 1 4 4)
         scale_weights = torch.softmax(scale_weights, dim=-1)
         # (B, N_query, n_group, T, n_points, n_levels)
-        scale_weights = scale_weights.expand(B, Q, self.num_groups, self.num_frames, self.num_points, self.num_levels)
+        scale_weights = scale_weights.expand(B, Q, self.num_groups, self.num_frames, self.num_points, self.num_levels)  # (1 600 4 8 4 4)
 
         # sampling
         sampled_feats = sampling_4d(
-            sampling_points,    # (B, N_query, T, N_group=4, N_points=4, 3)
-            mlvl_feats,         # List[(B*T*G, N_view, H2, W2, C), (B*T*G, N_view, H2, W2, C), ...]
-            scale_weights,      # (B, N_query, n_group=4, T, n_points, n_levels)
-            occ2img,            # (B, N=T*N_view, 4, 4)
-            image_h, image_w,
-            self.num_views
-        )  # (B, N_query, n_group, T*n_points, C)
+            sampling_points,    # (1 600 8 4 4 3) # (B, N_query, T, N_group=4, N_points=4, 3)
+            mlvl_feats,         # 4:(32 6 64 176 64) (32 6 32 88 64) (32 6 16 44 64) (32 6 8 22 64) # List[(B*T*G, N_view, H2, W2, C), (B*T*G, N_view, H2, W2, C), ...]
+            scale_weights,      # (1 600 4 8 4 4)# (B, N_query, n_group=4, T, n_points, n_levels)
+            occ2img,            # (1 48 4 4) # (B, N=T*N_view, 4, 4)
+            image_h, image_w,   # 256 704
+            self.num_views      # 6
+        )                       # (1 600 4 32 64) # (B, N_query, n_group, T*n_points, C)
 
-        return sampled_feats # todo (1 3600 4 16 64)
+        return sampled_feats # todo (1 3600 4 16 64) T:600 S:1200 M:2400 L:3600
 
     def forward(self, query_feat, query_pos, query_points, mlvl_feats, occ2img, img_metas):
         if self.training and query_feat.requires_grad:

@@ -16,7 +16,7 @@ python /home/lianghao/wangyushen/Projects/SuperOcc/tools_1/test.py \
     /home/lianghao/wangyushen/data/wangyushen/Weights/superocc/superocc-l_r50_704_seq_nui_24e.pth \
     --eval=bbox
 
-# todo -------------------------------------------------- #
+# ========================================================================== #
 # todo 在A100上
 conda config --append envs_dirs /vepfs-mlp2/c20250502/haoce/conda_env/wys_temp_2
 conda activate /vepfs-mlp2/c20250502/haoce/conda_env/wys_temp_2
@@ -33,10 +33,10 @@ cd /vepfs-mlp2/c20250502/haoce/wangyushen/SuperOcc/projects/mmdet3d_plugin/ops/m
 pip install .  --no-build-isolation
 cd /vepfs-mlp2/c20250502/haoce/wangyushen/SuperOcc/projects/mmdet3d_plugin/ops/tile_localagg_prob_sq
 pip install .  --no-build-isolation 
-python setup.py build_ext --inplace # 就地编译
+python setup.py build_ext --inplace # 需要就地编译
 
-# todo -------------------------------- #
-# surroundocc
+# ========================================================================== #
+# 在surroundocc数据集上 推理/可视化
 python /vepfs-mlp2/c20250502/haoce/wangyushen/SuperOcc/tools_1/test.py \
     /vepfs-mlp2/c20250502/haoce/wangyushen/SuperOcc/projects/configs/superocc_surroundocc/superocc-t_r50_704_seq_nui_24e_experiment.py \
     /c20250502/wangyushen/Weights/superocc/surroundocc/superocc-t_r50_704_seq_nui_24e.pth \
@@ -47,8 +47,8 @@ python /vepfs-mlp2/c20250502/haoce/wangyushen/SuperOcc/tools_1/viz_prediction.py
     /c20250502/wangyushen/Weights/superocc/surroundocc/superocc-t_r50_704_seq_nui_24e.pth \
     --eval=bbox
 
-# todo -------------------------------- #
-# occ3d
+# ========================================================================== #
+# 在occ3d数据集上 推理/可视化
 python /vepfs-mlp2/c20250502/haoce/wangyushen/SuperOcc/tools_1/test.py \
     /vepfs-mlp2/c20250502/haoce/wangyushen/SuperOcc/projects/configs/superocc/superocc-t_r50_704_seq_nui_48e_customs.py \
     /c20250502/wangyushen/Weights/superocc/occ3d/superocc-t_r50_704_seq_nui_48e.pth \

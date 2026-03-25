@@ -6,7 +6,9 @@
 
 # from setproctitle import setproctitle
 # setproctitle("wys")
-
+import os
+os.environ["TMPDIR"] = "/vepfs-mlp2/c20250502/haoce/wangyushen/tmp"
+os.makedirs(os.environ["TMPDIR"], exist_ok=True)
 
 import argparse
 import mmcv
@@ -171,7 +173,7 @@ def main():
     cfg.model.pretrained = None
     # in case the test dataset is concatenated
     samples_per_gpu = 1
-    if isinstance(cfg.data.test, dict):
+    if isinstance(cfg.data.test, dict): 
         cfg.data.test.test_mode = True
         samples_per_gpu = cfg.data.test.pop('samples_per_gpu', 1)
         if samples_per_gpu > 1:
@@ -199,7 +201,7 @@ def main():
         set_random_seed(args.seed, deterministic=args.deterministic)
 
     # build the dataloader
-    dataset = build_dataset(cfg.data.test)
+    dataset = build_dataset(cfg.data.test) # cfg.data.test:
     data_loader = build_dataloader(
         dataset,
         samples_per_gpu=samples_per_gpu,

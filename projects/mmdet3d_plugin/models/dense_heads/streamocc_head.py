@@ -119,6 +119,7 @@ class StreamOccHead(BaseModule):
     def init_weights(self):
         self.transformer.init_weights()
 
+    # =========================================#
     def get_meshgrid(self, ranges, grid, reso):
         xxx = torch.arange(grid[0], dtype=torch.float) * reso[0] + 0.5 * reso[0] + ranges[0]
         yyy = torch.arange(grid[1], dtype=torch.float) * reso[1] + 0.5 * reso[1] + ranges[1]
@@ -144,9 +145,9 @@ class StreamOccHead(BaseModule):
         B = x.size(0)
         # refresh the memory when the scene changes
         if self.memory_embedding is None: # todo 记忆初始化： 当第一帧进入，创建全零张量来占位
-            self.memory_embedding = x.new_zeros(B, self.memory_len, self.embed_dims).float() # todo (1 3000 256)
-            self.memory_reference_point = x.new_zeros(B, self.memory_len, 3).float()
-            self.memory_timestamp = x.new_zeros(B, self.memory_len, 1).float()
+            self.memory_embedding = x.new_zeros(B, self.memory_len, self.embed_dims).float() # T:(1 500 256)
+            self.memory_reference_point = x.new_zeros(B, self.memory_len, 3).float() # T:(1 500 3)
+            self.memory_timestamp = x.new_zeros(B, self.memory_len, 1).float() # memory_len:500
             self.memory_egopose = x.new_zeros(B, self.memory_len, 4, 4).float()
             self.memory_mask = x.new_zeros(B, self.memory_len).int()
         else:
@@ -199,56 +200,64 @@ class StreamOccHead(BaseModule):
             new_query_feat: (B, Q, C)
             new_reference_points: (B, Q, 3)
         """
-        B, Q, C = query_feat.shape
-        num_prop = self.num_propagated
+        B, Q, C = query_feat.shape # 当前帧query (1 600 256)
+        num_prop = self.num_propagated # 500 从内存队列中取一些query 500 这里就是Np
         num_keep = Q - num_prop
+        # ===========================================#
+        # 论文C.(2) 每一帧，前景得分最高的Np个查询及其参考点被推入内存队列，经过时序对齐后，被传播至下一帧。
         # todo 模型直接从历史记忆中取前num_prop个特征
-        prev_exists = data["prev_exists"].view(B, 1, 1)
-        prop_feat = temp_memory[:, :num_prop]  # (B, num_prop, C)
+        prev_exists = data["prev_exists"].view(B, 1, 1) 
+        prop_feat = temp_memory[:, :num_prop]  # (B, num_prop, C) # 默认memory已经按照重要性排好了：直接取前num_prop个历史query
         prop_reference_points = temp_reference_point[:, :num_prop]  # (B, num_prop, 3)
-
-        real_prop_reference_points = decode_points(prop_reference_points, self.pc_range)  # (B, N_prop，3)
-        real_reference_points = decode_points(reference_points, self.pc_range)  # (B, N_init，3)
+        # ===========================================#
+        # 论文C.(2) 缓解空间冗余：丢弃与传播参考点距离在阈值t以内的初始参考点
+        real_prop_reference_points = decode_points(prop_reference_points, self.pc_range)  # (B, N_prop，3) 获取memory参考点的实际位置 转换成真实坐标
+        real_reference_points = decode_points(reference_points, self.pc_range)  # (B, N_init，3) # 获取当前帧query的实际位置
         # todo 计算距离与“去重”策略
         # (B, num_prop, Q, 3)
-        diff = real_prop_reference_points[:, :, None, :] - real_reference_points[:, None, :, :]
+        diff = real_prop_reference_points[:, :, None, :] - real_reference_points[:, None, :, :] # 对每个当前query：找离他最近的query的距离
         dist2 = (diff ** 2).sum(-1)   # (B, num_prop, Q)
         min_dist2 = dist2.min(dim=1).values     # (B, Q)
-        far_mask = min_dist2 > 1.0      # (B, Q)
-
-        rand = torch.rand_like(far_mask.float())
+        far_mask = min_dist2 > 1.0      # (B, Q) # 保留距离历史query足够远的当前query
+        # ===========================================#
+        # 论文C.(2) 从剩余的初始查询中随机采样Nq-Np个候选查询来补充查询集合，以维持恒定数量Nq
+        # 随机采样：在远离历史查询的当前帧query中，随机取num_keep个query
+        rand = torch.rand_like(far_mask.float()) 
         score = rand.masked_fill(~far_mask, -1e8)
-        _, idx = score.topk(num_keep, dim=1)  # (B, num_keep)
+        _, idx = score.topk(num_keep, dim=1)  # (B, num_keep) #！注意是随机选取了num_keep个
         idx_feat = idx[..., None].expand(-1, -1, C)
         idx_ref = idx[..., None].expand(-1, -1, 3)
 
-        selected_feat = query_feat.gather(1, idx_feat)
+        selected_feat = query_feat.gather(1, idx_feat) # 挑选当前的query：得到当前帧中非重复的query
         selected_points = reference_points.gather(1, idx_ref)
-        merged_feat = torch.cat([prop_feat, selected_feat], dim=1)  # (B,Q,C)
-        merged_ref = torch.cat([prop_reference_points, selected_points], dim=1)  # (B,Q,3)
+        merged_feat = torch.cat([prop_feat, selected_feat], dim=1)  # (B,Q,C) # 拼接：[历史query，当前query]
+        merged_ref = torch.cat([prop_reference_points, selected_points], dim=1)  # (B,Q,3) 拼接：[历史点，当前点]
 
-        new_query_feat = torch.where(prev_exists, merged_feat, query_feat)
+        new_query_feat = torch.where(prev_exists, merged_feat, query_feat)  # 是否启用temporal 若prev_exists=False: 则不用历史query，直接使用原始query
         new_reference_points = torch.where(prev_exists, merged_ref, reference_points)
 
         return new_query_feat, new_reference_points
 
     def temporal_alignment(self, query_feat, reference_points, data): # todo 进行时序对齐与记忆融合：在语义层面将当前帧特征与历史记忆进行深度对齐与融合
-        B = query_feat.size(0) # todo query_feat: (1 3600 256)
+        B = query_feat.size(0) # todo query_feat: (1 3600 256) Nq: T: 600 L:3600
         temp_reference_point = (self.memory_reference_point - self.pc_range[:3]) / \
-                               (self.pc_range[3:6] - self.pc_range[0:3])
-        temp_memory = self.memory_embedding # todo (1 3000 256)
+                               (self.pc_range[3:6] - self.pc_range[0:3]) # 初始的内存队列中的查询点位置：位于Occ空间中心 T: (1 500 3)
+        temp_memory = self.memory_embedding # todo (1 3000 256) Np: T: 500 L: 3000 
         memory_mask = self.memory_mask
-        rec_ego_pose = torch.eye(4, device=query_feat.device).unsqueeze(0).unsqueeze(0).repeat(B, query_feat.size(1), 1, 1)
+        rec_ego_pose = torch.eye(4, device=query_feat.device).unsqueeze(0).unsqueeze(0).repeat(B, query_feat.size(1), 1, 1) # (1 600 4 4)
 
         if self.with_ego_pos: # todo True
             rec_ego_motion = torch.cat([torch.zeros_like(reference_points[..., :1]), rec_ego_pose[..., :3, :].flatten(-2)], dim=-1) # todo (1 3600 13)
-            rec_ego_motion = self.nerf_encoder(rec_ego_motion) # todo NeRF中的频率编码 -> (1 3600 156) 156 = 13 * 6(6个不同频率) * 2(sin和cos)
+            rec_ego_motion = self.nerf_encoder(rec_ego_motion) # todo NeRF中的频率编码 (1 3600 13) -> (1 3600 156) 156 = 13 * 6(6个不同频率) * 2(sin和cos)
             query_feat = self.ego_pose_memory(query_feat, rec_ego_motion) # todo (1 3600 256)
-            memory_ego_motion = torch.cat([self.memory_timestamp.float(), self.memory_egopose[..., :3, :].flatten(-2)], dim=-1) # todo (1 3600 13)
-            memory_ego_motion = self.nerf_encoder(memory_ego_motion)
-            temp_memory = self.ego_pose_memory(temp_memory, memory_ego_motion) # todo 特征调制
+            memory_ego_motion = torch.cat([self.memory_timestamp.float(), self.memory_egopose[..., :3, :].flatten(-2)], dim=-1) # todo (1 3600 13) 时序+3x3R+3x1T
+            memory_ego_motion = self.nerf_encoder(memory_ego_motion) # L:(1 3000 13) -> (1 3000 156) T: (1 500 13) -> (1 500 156) 内存队列
+            temp_memory = self.ego_pose_memory(temp_memory, memory_ego_motion) # todo 特征调制 T: (1 500 256)
 
-        if self.prop_query: # todo True
+        if self.prop_query: # todo True Propagated Queries 
+            # ======================================================#
+            # 论文C.(2) 以对象为中心的时序建模：每一帧前景得分最高的Np个查询被用于下一帧，同时剔除距离传播查询较近的初始查询，从剩余的初始查询中筛选Nq-Np个查询，以维持恒定数量Nq个查询
+            # 设计目的：通过混合查询的设计，为持续存在的目标提供稳定的时序先验，同时为新出现的目标提供充分的探索性覆盖。
             query_feat, reference_points = self.prop_queries(query_feat, reference_points, temp_memory, temp_reference_point, data)
             temp_memory = temp_memory[:, self.num_propagated:]
             temp_reference_point = temp_reference_point[:, self.num_propagated:]
@@ -257,17 +266,21 @@ class StreamOccHead(BaseModule):
         return query_feat, reference_points, temp_memory, temp_reference_point, memory_mask, rec_ego_pose
 
     def forward(self, img_metas,  **data):
-        if self.temp_fusion:
-            self.pre_update_memory(data)
+        if self.temp_fusion: # True
+            self.pre_update_memory(data) # 以物体为中心的时序建模：大小为Np的内存队列，用于存储上一帧选定的查询 Np
 
         mlvl_feats = data['img_feats']
-        B, Q, = mlvl_feats[0].shape[0], self.num_query # todo self.num_query: 3600
+        B, Q, = mlvl_feats[0].shape[0], self.num_query # todo self.num_query: Nq: T:600 S:1200 M:2400 L:3600 Nq
         # (N_query, 3) --> (B, N_query, 3)
-        init_points = self.init_points.weight[None, :, :].repeat(B, 1, 1) # todo (1 3600 3)
+        init_points = self.init_points.weight[None, :, :].repeat(B, 1, 1) # todo (1 3600 3) 初始查询的3维参考点 # 以视角为中心的时序建模：初始化的查询从内存队列中采样和聚合多帧图像特征
         # (B, N_query, C)
-        query_feat = init_points.new_zeros(B, Q, self.embed_dims) # todo (1 3600 256)
+        query_feat = init_points.new_zeros(B, Q, self.embed_dims) # todo (1 3600 256) 初始查询的特征
 
+        # =======================================================#
+        # 对应论文C.(2)节工作：以对象为中心的时序建模(object-centric temporal modeling): 稀疏查询紧凑编码了场景的几何与语义信息。鉴于驾驶场景演变中固有的时序稀疏性，相邻帧中的稀疏查询表示展示出强相关性
+        # 鉴于这一观察，以物体为中心的时序建模将这些查询跨帧传播，从而能够高效利用信息丰富的历史空间和语义先验
         if self.temp_fusion: # todo True
+            # 历史帧得到最高的Np个查询推入内存队列中，同时从初始查询中随机采样Nq-Np个查询，构成数量恒定的Nq个query：以提供稳定的时序先验，并为新出现目标提供充分的探索性覆盖
             query_feat, reference_points, temp_memory, temp_reference_point, memory_mask, rec_ego_pose = \
                 self.temporal_alignment(query_feat, init_points, data)
         else:
@@ -275,21 +288,22 @@ class StreamOccHead(BaseModule):
             temp_memory = None
             temp_reference_point = None
             memory_mask = None
-
-        # query_feats: List[(B, N_query, C), (B, N_query, C), ...]
-        # cls_scores: List[(B, N_query, n_refine_1, n_cls), (B, N_query, n_refine_2, n_cls), ...]
-        # refine_sqs: List[(B, N_query, n_refine_1, 13), (B, N_query, n_refine_2, 13), ...]
+        
+        # =======================================================#
+        # 对应论文C.(1)节工作：以视图为中心的时序建模：视图中心路径旨在从历史观测序列中提取细粒度的时序线索
         query_feats, cls_scores, refine_sqs = self.transformer(
-            query_feat,  # (B, N_query, C) # todo (1 3600 256)
-            reference_points.unsqueeze(dim=2),  # (B, N_query, 1, 3) # todo (1 3600 1 3)
-            temp_memory,  # (B, Mem, C) # todo (1 Mem 256)
-            temp_reference_point,  # (B, N_query, 3) # todo (1 0 3)
+            query_feat,  # (1 600 256)
+            reference_points.unsqueeze(dim=2),  # (1 600 1 3)
+            temp_memory,  # (1 0 256)
+            temp_reference_point,  #  (1 0 3)
             memory_mask, # todo (1 0)
-            mlvl_feats,  # List[(B, N, C=256, H2, W2), ..., (B, N, C=256, H5, W5)]
+            mlvl_feats,  # 4:(1 48 256 64 176) (1 48 256 32 88) (1 48 256 16 44) (1 48 256 8 22)
             data,
             img_metas=img_metas,
         )
 
+        # =======================================================#
+        # 
         cls_scores_list = []
         refine_sqs_list = []
         pred_occ_list = []
@@ -310,12 +324,11 @@ class StreamOccHead(BaseModule):
             cls_score = cls_scores[i] # todo (1 3600 4 17)
             refine_sqs_list.append(sqs)
             cls_scores_list.append(cls_score)
-            # todo ---------------------------------------------------------#
-            # todo 超二次曲面到体素溅射 sq2occ
+            
+            #==============================================================#
             occ_pred = self.sq2occ(cls_score, sqs) # todo (1 200 200 16 18)
             pred_occ_list.append(occ_pred)
-            # todo ---------------------------------------------------------#
-            # todo 保存中间jian
+
             if DUMP.enabled and i == (len(refine_sqs) - 1):
                 scene_name = img_metas[0]['scene_name']
                 sample_idx = img_metas[0]['sample_idx']

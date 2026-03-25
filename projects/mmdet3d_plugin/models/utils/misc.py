@@ -11,8 +11,8 @@ def memory_refresh(memory, prev_exist):
     memory_shape = memory.shape
     view_shape = [1 for _ in range(len(memory_shape))]
     prev_exist = prev_exist.view(-1, *view_shape[1:])
-    return memory * prev_exist # todo prev_exist:0/1 是否保留记忆
-
+    return memory * prev_exist 
+    
 def topk_gather(feat, topk_indexes):
     if topk_indexes is not None:
         feat_shape = feat.shape

@@ -32,34 +32,34 @@ def sampling_4d(sample_points, mlvl_feats, scale_weights, occ2img, image_h, imag
         L: num of layers of feature pyramid (typically it is 4: C2, C3, C4, C5)
     """
 
-    B, Q, T, G, P, _ = sample_points.shape  # (B, Q, T, G, P, 3)
+    B, Q, T, G, P, _ = sample_points.shape  # (1 600 8 4 4 3) # (B, Q, T, G, P, 3)
     N = num_views
-    
-    sample_points = sample_points.reshape(B, Q, T, G * P, 3)    # (B, Q, T, G*P, 3)
+
+    sample_points = sample_points.reshape(B, Q, T, G * P, 3) # (1 600 8 16 3)  # (B, Q, T, G*P, 3)
 
     # get the projection matrix
-    occ2img = occ2img[:, :, None, None, :, :]  # (B, T*N, 1, 1, 4, 4)
-    occ2img = occ2img.expand(B, T*N, Q, G * P, 4, 4)     # (B, T*N, Q, G*P, 4, 4)
-    occ2img = occ2img.reshape(B, T, N, Q, G*P, 4, 4)     # (B, T, N, Q, G*P, 4, 4)
+    occ2img = occ2img[:, :, None, None, :, :] # (1 48 1 1 4 4) # (B, T*N, 1, 1, 4, 4)
+    occ2img = occ2img.expand(B, T*N, Q, G * P, 4, 4) # (1 48 600 16 4 4)     # (B, T*N, Q, G*P, 4, 4)
+    occ2img = occ2img.reshape(B, T, N, Q, G*P, 4, 4) # (1 8 6 600 16 4 4)    # (B, T, N, Q, G*P, 4, 4)
 
     # expand the points
-    ones = torch.ones_like(sample_points[..., :1])
-    sample_points = torch.cat([sample_points, ones], dim=-1)  # (B, Q, T, G*P, 4)  4:(x, y, z, 1)
-    sample_points = sample_points[:, :, None, ..., None]      # (B, Q, 1, T, G*P, 4, 1)
-    sample_points = sample_points.expand(B, Q, N, T, G * P, 4, 1)   # (B, Q, N, T, G*P, 4, 1)
-    sample_points = sample_points.transpose(1, 3)   # (B, T, N, Q, G*P, 4, 1)
+    ones = torch.ones_like(sample_points[..., :1]) # (1 600 8 16 1)
+    sample_points = torch.cat([sample_points, ones], dim=-1)  # (1 600 8 16 4) # (B, Q, T, G*P, 4)  4:(x, y, z, 1)
+    sample_points = sample_points[:, :, None, ..., None] # (1 600 1 8 16 4 1)     # (B, Q, 1, T, G*P, 4, 1)
+    sample_points = sample_points.expand(B, Q, N, T, G * P, 4, 1) # (1 600 6 8 16 4 1) # (B, Q, N, T, G*P, 4, 1)
+    sample_points = sample_points.transpose(1, 3) # (1 8 6 600 16 4 1)  # (B, T, N, Q, G*P, 4, 1)
 
     # project 3d sampling points to N views
-    sample_points_cam = torch.matmul(occ2img, sample_points).squeeze(-1)  # (B, T, N, Q, G*P, 4)
+    sample_points_cam = torch.matmul(occ2img, sample_points).squeeze(-1) # (1 8 6 600 16 4) # (B, T, N, Q, G*P, 4)
 
     # homo coord -> pixel coord
-    homo = sample_points_cam[..., 2:3]
-    homo_nonzero = torch.maximum(homo, torch.zeros_like(homo) + eps)
-    sample_points_cam = sample_points_cam[..., 0:2] / homo_nonzero  # (B, T, N, Q, G*P, 2)
+    homo = sample_points_cam[..., 2:3] # (1 8 6 600 60 1)
+    homo_nonzero = torch.maximum(homo, torch.zeros_like(homo) + eps)  # (1 8 6 600 16 1)
+    sample_points_cam = sample_points_cam[..., 0:2] / homo_nonzero    # (1 8 6 600 16 2) # (B, T, N, Q, G*P, 2)
 
     # normalize
-    sample_points_cam[..., 0] /= image_w
-    sample_points_cam[..., 1] /= image_h
+    sample_points_cam[..., 0] /= image_w # 704
+    sample_points_cam[..., 1] /= image_h # 256
 
     # check if out of image
     valid_mask = ((homo > eps) \
@@ -67,7 +67,7 @@ def sampling_4d(sample_points, mlvl_feats, scale_weights, occ2img, image_h, imag
         & (sample_points_cam[..., 1:2] < 1.0)
         & (sample_points_cam[..., 0:1] > 0.0)
         & (sample_points_cam[..., 0:1] < 1.0)
-    ).squeeze(-1).float()  # (B, T, N, Q, G*P)
+    ).squeeze(-1).float()  # (1 8 6 600 16) # (B, T, N, Q, G*P) 采样点在第n个相机利是否有效
 
     # for visualization only
     # if DUMP.enabled:
@@ -76,8 +76,8 @@ def sampling_4d(sample_points, mlvl_feats, scale_weights, occ2img, image_h, imag
     #     torch.save(valid_mask.cpu(),
     #                '{}/sample_points_cam_valid_mask_stage{}.pth'.format(DUMP.out_dir, DUMP.stage_count))
 
-    valid_mask = valid_mask.permute(0, 1, 3, 4, 2)  # (B, T, Q, G*P, N)
-    sample_points_cam = sample_points_cam.permute(0, 1, 3, 4, 2, 5)  # (B, T, Q, G*P, N, 2)
+    valid_mask = valid_mask.permute(0, 1, 3, 4, 2) # (1 8 600 16 6) # (B, T, Q, G*P, N)
+    sample_points_cam = sample_points_cam.permute(0, 1, 3, 4, 2, 5) # (1 8 600 16 6 2) # (B, T, Q, G*P, N, 2)
 
     # prepare batched indexing
     i_batch = torch.arange(B, dtype=torch.long, device=sample_points.device)
@@ -88,37 +88,37 @@ def sampling_4d(sample_points, mlvl_feats, scale_weights, occ2img, image_h, imag
     i_time = i_time.view(1, T, 1, 1, 1).expand(B, T, Q, G * P, 1)
     i_query = i_query.view(1, 1, Q, 1, 1).expand(B, T, Q, G * P, 1)
     i_point = i_point.view(1, 1, 1, G * P, 1).expand(B, T, Q, G * P, 1)
-    
+
     # we only keep at most one valid sampling point, see https://zhuanlan.zhihu.com/p/654821380
-    i_view = torch.argmax(valid_mask, dim=-1)[..., None]  # (B, T, Q, G*P, 1)
+    i_view = torch.argmax(valid_mask, dim=-1)[..., None]  # (1 8 600 16 1) # (B, T, Q, G*P, 1) 只选取一个view 大部分只有一个投影视图
 
     # index the only one sampling point and its valid flag
-    sample_points_cam = sample_points_cam[i_batch, i_time, i_query, i_point, i_view, :]  # (B, T, Q, G*P, 1, 2)
-    valid_mask = valid_mask[i_batch, i_time, i_query, i_point, i_view]  # (B, T, Q, G*P)
+    sample_points_cam = sample_points_cam[i_batch, i_time, i_query, i_point, i_view, :] # (1 8 600 16 1 2) # (B, T, Q, G*P, 1, 2)
+    valid_mask = valid_mask[i_batch, i_time, i_query, i_point, i_view] # (1 8 600 16 1) # (B, T, Q, G*P)
 
-    # treat the view index as a new axis for grid_sample and normalize the view index to [0, 1]
+    # treat the view index as a new axis for grid_sample and normalize the view index to [0, 1] 视角索引 
     # (B, T, Q, G*P, 1, 3)
-    sample_points_cam = torch.cat([sample_points_cam, i_view[..., None].float() / (N - 1)], dim=-1)
+    sample_points_cam = torch.cat([sample_points_cam, i_view[..., None].float() / (N - 1)], dim=-1) # (1 8 600 16 1 3)
 
     # reorganize the tensor to stack T and G to the batch dim for better parallelism
-    sample_points_cam = sample_points_cam.reshape(B, T, Q, G, P, 1, 3)
-    sample_points_cam = sample_points_cam.permute(0, 1, 3, 2, 4, 5, 6)
-    sample_points_cam = sample_points_cam.reshape(B*T*G, Q, P, 3)     # (B*T*G, Q, P, 3)
-    sample_points_cam = sample_points_cam.contiguous()
+    sample_points_cam = sample_points_cam.reshape(B, T, Q, G, P, 1, 3) # (1 8 600 4 4 1 3)
+    sample_points_cam = sample_points_cam.permute(0, 1, 3, 2, 4, 5, 6) # (1 8 4 600 4 1 3)
+    sample_points_cam = sample_points_cam.reshape(B*T*G, Q, P, 3)      # (32 600 4 3) # (B*T*G, Q, P, 3)
+    sample_points_cam = sample_points_cam.contiguous() # (32 600 4 3)
 
     # reorganize the tensor to stack T and G to the batch dim for better parallelism
-    scale_weights = scale_weights.reshape(B, Q, G, T, P, -1)
-    scale_weights = scale_weights.permute(0, 2, 3, 1, 4, 5)
-    scale_weights = scale_weights.reshape(B*G*T, Q, P, -1)
-    scale_weights = scale_weights.contiguous()       # (B*T*G, Q, P, L)
+    scale_weights = scale_weights.reshape(B, Q, G, T, P, -1) # (1 600 4 8 4 4)
+    scale_weights = scale_weights.permute(0, 2, 3, 1, 4, 5)  # (1 4 8 600 4 4)
+    scale_weights = scale_weights.reshape(B*G*T, Q, P, -1)   # (32 600 4 4)
+    scale_weights = scale_weights.contiguous()               # (32 600 4 4) # (B*T*G, Q, P, L)
 
     # multi-scale multi-view grid sample
-    final = msmv_sampling(mlvl_feats, sample_points_cam, scale_weights)     # (B*T*G, Q, C, P)
+    final = msmv_sampling(mlvl_feats, sample_points_cam, scale_weights) # (32 600 64 4)     # (B*T*G, Q, C, P)
 
     # reorganize the sampled features
-    C = final.shape[2]
-    final = final.reshape(B, T, G, Q, C, P)     # (B*T*G, Q, C, P) --> (B, T, G, Q, C, P)
-    final = final.permute(0, 3, 2, 1, 5, 4)     # (B, Q, G, T, P, C)
-    final = final.flatten(3, 4)  # (B, Q, G, T, P, C) --> (B, Q, G, T*P, C)
+    C = final.shape[2] # 64
+    final = final.reshape(B, T, G, Q, C, P) # (1 8 4 600 64 4)     # (B*T*G, Q, C, P) --> (B, T, G, Q, C, P)
+    final = final.permute(0, 3, 2, 1, 5, 4) # (1 600 4 8 4 64)     # (B, Q, G, T, P, C)
+    final = final.flatten(3, 4)             # (1 600 4 32 64)    # (B, Q, G, T, P, C) --> (B, Q, G, T*P, C)
 
     return final
