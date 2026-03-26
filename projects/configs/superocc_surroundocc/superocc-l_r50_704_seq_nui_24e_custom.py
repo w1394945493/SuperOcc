@@ -161,7 +161,7 @@ ida_aug_conf = {
 
 train_pipeline = [
     dict(type='LoadMultiViewImageFromFiles', to_float32=False, color_type='color'),
-    dict(type='LoadMultiViewImageFromMultiSweeps', sweeps_num=num_frames - 1),
+    dict(type='LoadMultiViewImageFromMultiSweeps', sweeps_num=num_frames - 1), # 加载历史帧数据
     dict(type='LoadOccupancySurroundOcc'),
     dict(type='RandomTransformImage', ida_aug_conf=ida_aug_conf, training=True),
     dict(type='CustomFormatBundle3D', class_names=object_names, collect_keys=collect_keys),
@@ -171,7 +171,7 @@ train_pipeline = [
 
 test_pipeline = [
     dict(type='LoadMultiViewImageFromFiles', to_float32=False, color_type='color'),
-    dict(type='LoadMultiViewImageFromMultiSweeps', sweeps_num=num_frames - 1, test_mode=True),
+    dict(type='LoadMultiViewImageFromMultiSweeps', sweeps_num=num_frames - 1, test_mode=True),  # 加载历史帧数据
     dict(type='RandomTransformImage', ida_aug_conf=ida_aug_conf, training=False),
     dict(
         type='MultiScaleFlipAug3D',

@@ -26,12 +26,12 @@ class CELoss(nn.Module):
         ce_input = ce_input.float()
         ce_label = ce_label.long()
 
-        if not self.activated:
+        if not self.activated:  # F.cross_entropy: 输入是logits(未经过softmax)
             ce_loss = F.cross_entropy(ce_input, ce_label, weight=self.class_weight.to(ce_input),
                                       ignore_index=self.ignore_label, reduction='none')
-        else:
+        else:                   # F.nll_lss: 输入是概率(已经softmax过)：必须是log
             ce_loss = F.nll_loss(torch.log(ce_input), ce_label, weight=self.class_weight.to(ce_input),
-                                 ignore_index=self.ignore_label, reduction='none')
+                                 ignore_index=self.ignore_label, reduction='none') 
 
         # apply weights and do the reduction
         if weight is not None:

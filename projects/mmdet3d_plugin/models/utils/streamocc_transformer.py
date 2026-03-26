@@ -505,20 +505,21 @@ class AdaptiveMixing(nn.Module):
 
         self.query_dim = query_dim
         self.in_dim = in_dim
-        self.in_points = in_points
+        self.in_points = in_points # in_points = num_points * num_frames
         self.n_groups = n_groups
         self.out_dim = out_dim
-        self.out_points = out_points
+        self.out_points = out_points # out_points = num_points * num_frames
 
         self.eff_in_dim = in_dim // n_groups
         self.eff_out_dim = out_dim // n_groups
 
         self.m_parameters = self.eff_in_dim * self.eff_out_dim
-        self.s_parameters = self.in_points * self.out_points
-        self.total_parameters = self.m_parameters + self.s_parameters
+        self.s_parameters = self.in_points * self.out_points  #  (num_points * num_frames)^2
+        self.total_parameters = self.m_parameters + self.s_parameters 
 
+        #======================================================#
         self.parameter_generator = nn.Linear(self.query_dim, self.n_groups * self.total_parameters)
-        self.out_proj = nn.Linear(self.eff_out_dim * self.out_points * self.n_groups, self.query_dim)
+        self.out_proj = nn.Linear(self.eff_out_dim * self.out_points * self.n_groups, self.query_dim) # 
         self.act = nn.ReLU(inplace=True)
 
     @torch.no_grad()

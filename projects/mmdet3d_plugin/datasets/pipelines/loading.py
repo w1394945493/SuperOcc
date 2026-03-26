@@ -77,23 +77,23 @@ class LoadMultiViewImageFromMultiSweeps:
                     results['filename'].append(results['filename'][j])
                     results['lidar2img'].append(np.copy(results['lidar2img'][j]))
         else:
-            if self.test_mode:
-                interval = self.test_interval
-                choices = [(k + 1) * interval - 1 for k in range(self.sweeps_num)]
-            elif len(results['cam_sweeps']['prev']) <= self.sweeps_num:
+            if self.test_mode: # 情况1：测试阶段(固定采样)
+                interval = self.test_interval # 6
+                choices = [(k + 1) * interval - 1 for k in range(self.sweeps_num)] # 每个interval取一帧：[5 11 17 23 29 35 41]
+            elif len(results['cam_sweeps']['prev']) <= self.sweeps_num:  # 情况2：历史帧不足
                 pad_len = self.sweeps_num - len(results['cam_sweeps']['prev'])
                 choices = list(range(len(results['cam_sweeps']['prev']))) + \
-                    [len(results['cam_sweeps']['prev']) - 1] * pad_len
-            else:
-                max_interval = len(results['cam_sweeps']['prev']) // self.sweeps_num
-                max_interval = min(max_interval, self.train_interval[1])
-                min_interval = min(max_interval, self.train_interval[0])
-                interval = np.random.randint(min_interval, max_interval + 1)
+                    [len(results['cam_sweeps']['prev']) - 1] * pad_len # 原有索引 + 重复最后一帧
+            else:  # 情况3: 训练阶段(随机采样)
+                max_interval = len(results['cam_sweeps']['prev']) // self.sweeps_num # 最大间隔
+                max_interval = min(max_interval, self.train_interval[1]) # 限制采样间隔不要太大
+                min_interval = min(max_interval, self.train_interval[0]) # 限制采样间隔不要太小
+                interval = np.random.randint(min_interval, max_interval + 1) # 随机取一个interval
                 choices = [(k + 1) * interval - 1 for k in range(self.sweeps_num)]
 
-            for idx in sorted(list(choices)):
+            for idx in sorted(list(choices)): 
                 sweep_idx = min(idx, len(results['cam_sweeps']['prev']) - 1)
-                sweep = results['cam_sweeps']['prev'][sweep_idx]
+                sweep = results['cam_sweeps']['prev'][sweep_idx] # 当前帧六路相机数据
 
                 if len(sweep.keys()) < len(cam_types):
                     sweep = results['cam_sweeps']['prev'][sweep_idx - 1]
@@ -103,10 +103,10 @@ class LoadMultiViewImageFromMultiSweeps:
                     results['img_timestamp'].append(sweep[sensor]['timestamp'] / 1e6)
                     results['filename'].append(os.path.relpath(sweep[sensor]['data_path']))
                     results['lidar2img'].append(compose_ego2img(
-                        results['lidar2global'],
-                        sweep[sensor]['sensor2global_translation'],
-                        sweep[sensor]['sensor2global_rotation'],
-                        sweep[sensor]['cam_intrinsic'],
+                        results['lidar2global'],                      # (4 4)
+                        sweep[sensor]['sensor2global_translation'],   # (3,)
+                        sweep[sensor]['sensor2global_rotation'],      # (3,3)
+                        sweep[sensor]['cam_intrinsic'],               # (3,3)
                     ))
 
         # results: dict{
@@ -146,7 +146,7 @@ class LoadMultiViewImageFromMultiSweeps:
                     sweep = results['cam_sweeps']['prev'][sweep_idx - 1]
 
                 for sensor in cam_types:
-                    # skip loading history frames
+                    # skip loading history frames # 在线加载：跳过加载历史帧图片
                     results['img_timestamp'].append(sweep[sensor]['timestamp'] / 1e6)
                     results['filename'].append(os.path.relpath(sweep[sensor]['data_path']))
                     results['lidar2img'].append(compose_ego2img(
@@ -159,14 +159,18 @@ class LoadMultiViewImageFromMultiSweeps:
         return results
 
     def __call__(self, results):
-        if self.sweeps_num == 0:
+        if self.sweeps_num == 0: # self.sweeps_num:7  8-1=7
             return results
 
-        world_size = get_dist_info()[1]
-        if world_size == 1 and self.test_mode:
-            return self.load_online(results)
-        else:
-            return self.load_offline(results)
+        # world_size = get_dist_info()[1]
+        # if world_size == 1 and self.test_mode:
+        #     #===================================#
+        #     # online模式：使用当前帧作为过去帧
+        #     return self.load_online(results)
+        # else:
+        #     return self.load_offline(results)
+        
+        return self.load_offline(results)
 
 
 @PIPELINES.register_module()

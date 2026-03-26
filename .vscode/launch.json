@@ -10,7 +10,8 @@
             "request": "launch",
             "program": "/vepfs-mlp2/c20250502/haoce/wangyushen/SuperOcc/tools_1/test.py",
             "args": [
-                "/vepfs-mlp2/c20250502/haoce/wangyushen/SuperOcc/projects/configs/superocc_surroundocc/superocc-t_r50_704_seq_nui_24e_experiment.py",
+                // "/vepfs-mlp2/c20250502/haoce/wangyushen/SuperOcc/projects/configs/superocc_surroundocc/superocc-t_r50_704_seq_nui_24e_experiment.py",
+                "/vepfs-mlp2/c20250502/haoce/wangyushen/SuperOcc/projects/configs/customs/superocc-t_r50_704_seq_nui_24e_test.py",
                 "/c20250502/wangyushen/Weights/superocc/surroundocc/superocc-t_r50_704_seq_nui_24e.pth",
                 "--eval=bbox",
             ],
@@ -18,12 +19,26 @@
             // "justMyCode": false,
         },
         {
+            "name": "train(experiment)(surroundocc)",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "/vepfs-mlp2/c20250502/haoce/wangyushen/SuperOcc/tools_1/train.py",
+            "args": [
+                // "/vepfs-mlp2/c20250502/haoce/wangyushen/SuperOcc/projects/configs/superocc_surroundocc/superocc-t_r50_704_seq_nui_24e_experiment.py",
+                "/vepfs-mlp2/c20250502/haoce/wangyushen/SuperOcc/projects/configs/customs/superocc-t_r50_704_seq_nui_24e_test.py",
+                "--work-dir", "/vepfs-mlp2/c20250502/haoce/wangyushen/Outputs/superocc/debug"
+            ],
+            "console": "integratedTerminal",
+            "justMyCode": false,
+        },
+        {
             "name": "viz prediction(experiment) surroundocc",
             "type": "debugpy",
             "request": "launch",
             "program": "/vepfs-mlp2/c20250502/haoce/wangyushen/SuperOcc/tools_1/viz_prediction.py",
             "args": [
-                "/vepfs-mlp2/c20250502/haoce/wangyushen/SuperOcc/projects/configs/superocc_surroundocc/superocc-t_r50_704_seq_nui_24e_experiment.py",
+                // "/vepfs-mlp2/c20250502/haoce/wangyushen/SuperOcc/projects/configs/superocc_surroundocc/superocc-t_r50_704_seq_nui_24e_experiment.py",
+                "/vepfs-mlp2/c20250502/haoce/wangyushen/SuperOcc/projects/configs/customs/superocc-t_r50_704_seq_nui_24e_test.py",
                 "/c20250502/wangyushen/Weights/superocc/superocc-t_r50_704_seq_nui_24e.pth",
                 "--eval=bbox",
             ],

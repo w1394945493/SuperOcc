@@ -169,7 +169,7 @@ class SuperOCC(MVXTwoStageDetector):
         # img_feats: List[(B, N, C=256, H2, W2), ..., (B, N, C=256, H5, W5)]
         img_feats = self.extract_feat(img, img_metas)
         data['img_feats'] = img_feats
-
+        #========================================#
         if self.seq_mode:
             if self.prev_scene_token is None:
                 prev_exists = [0] * B
@@ -201,28 +201,35 @@ class SuperOCC(MVXTwoStageDetector):
         outs = self.pts_bbox_head(img_metas, **data)
         occ_list = self.pts_bbox_head.get_occ(
             outs, img_metas)
-        return occ_list
+        return occ_list # 1:(200 200 16)
 
     def simple_test(self, img_metas, **data):
         """Test function of point cloud branch."""
         if img_metas[0]['scene_token'] != self.prev_scene_token: # 判断当前帧是不是同一个scene的连续帧，决定是否使用上一帧的memory，是否重置模型的时序状态
             self.prev_scene_token = img_metas[0]['scene_token'] # scene_token:判断是否进入新场景
             data['prev_exists'] = data['img'].new_zeros(1) # 更新一下记录
-            self.pts_bbox_head.reset_memory()
+            self.pts_bbox_head.reset_memory() # 当前帧与上一帧不属于同一场景：则更新内存队列(重置为None)
         else:
             data['prev_exists'] = data['img'].new_ones(1)
 
         # todo ----------------------------------------- #
         # todo offline 和 online
-        world_size = get_dist_info()[1]
-        if world_size == 1:  # 
-            return self.simple_test_online(img_metas, **data) # online：顺序处理(有时间关系)
-        else:  # offline
-            return self.simple_test_offline(img_metas, **data) # offine：并行处理(无时序) 帧之间没有时序
+        # world_size = get_dist_info()[1]
+        # if world_size == 1:  # 
+        #     #===============================================#
+        #     # online模式：使用当前帧作为过去帧
+        #     return self.simple_test_online(img_metas, **data) # online：顺序处理(有时间关系)
+        # else:  # offline
+        #     return self.simple_test_offline(img_metas, **data) # offine：并行处理(无时序) 帧之间没有时序
+        
+        #=================================================#
+        return self.simple_test_offline(img_metas, **data)
+
+
 
     def simple_test_offline(self, img_metas, **data):
-        img = data['img']
-        img_feats = self.extract_feat(img=img, img_metas=img_metas)
+        img = data['img'] # (1 48 3 256 704)
+        img_feats = self.extract_feat(img=img, img_metas=img_metas) # 4:(1 48 256 64 176) (1 48 256 32 88) (1 48 256 16 44) (1 48 256 8 22)
         data['img_feats'] = img_feats
         return self.simple_test_pts(img_metas, **data)
 
@@ -234,7 +241,7 @@ class SuperOCC(MVXTwoStageDetector):
         B, N, C, H, W = img.shape
         img = img.reshape(B, N // 6, 6, C, H, W) # todo (1 1 6 3 256 704) (bs 时间帧 相机 图像3HW)
 
-        img_filenames = img_metas[0]['filename']
+        img_filenames = img_metas[0]['filename'] # 
         num_frames = len(img_filenames) // 6
 
         img_shape = (H, W, C)

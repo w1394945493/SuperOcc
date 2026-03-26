@@ -22,12 +22,16 @@ memory_len = 500   # 内存队列长度
 topk_proposals = 500
 num_propagated = 500
 
-#=============================#
-prop_query = True    # temp_fusion、prop_query、with_ego_pos和num_frames 应该是一起的
-temp_fusion = True   # 用于控制是否做时序融合
-with_ego_pos = True
-num_frames = 8       # 控制视频帧
-#=============================#
+#===============================#
+# prop_query = True    # temp_fusion、prop_query、with_ego_pos和num_frames 应该是一起的
+# temp_fusion = True   # 用于控制是否做时序融合
+# with_ego_pos = True
+# num_frames = 8       # 控制视频帧
+prop_query = False    # temp_fusion、prop_query、with_ego_pos和num_frames 应该是一起的
+temp_fusion = False   # 用于控制是否做时序融合
+with_ego_pos = False
+num_frames = 1       # 控制视频帧
+#===============================#
 
 num_levels = 4
 num_points = 4
@@ -48,15 +52,25 @@ occ_names = [
      'vegetation'
 ]
 
-num_gpus = 4
-batch_size = 2
+#======================= train params =============================#
+# num_gpus = 4
+# batch_size = 2
+num_gpus = 2
+batch_size = 1
+workers_per_gpu=4
 
+log_interval=5 # 日志打印间隔
+# num_iters_per_epoch = 28130 // (num_gpus * batch_size)
+num_iters_per_epoch = 10 // (num_gpus * batch_size)   # 每个epoch迭代步数：num_train_dataset // (num_gpus * batch_size)
+num_epochs = 24                                       # 最大训练epoch数
+max_iters = num_epochs * num_iters_per_epoch          # 最大迭代次数
+max_keep_ckpts=2                                      # 最多保留model数量
+# val_interval=num_iters_per_epoch*num_epochs           # 评估间隔
+val_interval=num_iters_per_epoch           # 评估间隔
 
-
-num_iters_per_epoch = 28130 // (num_gpus * batch_size)
-num_epochs = 24
-num_epochs_single_frame = 2
-seq_mode = True
+# num_epochs_single_frame = 2
+# seq_mode = True # 视频流训练
+seq_mode = False
 
 collect_keys = ['lidar2img', 'intrinsics', 'extrinsics', 'timestamp', 'img_timestamp', 'ego_pose', 'ego_pose_inv']
 
@@ -79,7 +93,7 @@ model = dict(
     img_backbone=dict(
         init_cfg=dict(
             type='Pretrained',
-            checkpoint="ckpts/cascade_mask_rcnn_r50_fpn_coco-20e_20e_nuim_20201009_124951-40963960.pth",
+            checkpoint="/c20250502/wangyushen/Weights/pretrained/cascade_mask_rcnn_r50_fpn_coco-20e_20e_nuim_20201009_124951-40963960.pth",
             prefix='backbone.'),
         type='ResNet',
         depth=50,
@@ -97,6 +111,7 @@ model = dict(
         in_channels=[256, 512, 1024, 2048],
         out_channels=embed_dims,
         num_outs=num_levels),
+    #=========================================#
     pts_bbox_head=dict(
         type='StreamOccHead',
         num_classes=len(occ_names),
@@ -167,7 +182,7 @@ ida_aug_conf = {
 
 train_pipeline = [
     dict(type='LoadMultiViewImageFromFiles', to_float32=False, color_type='color'),
-    dict(type='LoadMultiViewImageFromMultiSweeps', sweeps_num=num_frames - 1),
+    # dict(type='LoadMultiViewImageFromMultiSweeps', sweeps_num=num_frames - 1),
     dict(type='LoadOccupancySurroundOcc'),
     dict(type='RandomTransformImage', ida_aug_conf=ida_aug_conf, training=True),
     dict(type='CustomFormatBundle3D', class_names=object_names, collect_keys=collect_keys),
@@ -177,11 +192,11 @@ train_pipeline = [
 
 test_pipeline = [
     dict(type="LoadMultiViewImageFromFiles", to_float32=False, color_type="color"),
-    dict(
-        type="LoadMultiViewImageFromMultiSweeps",
-        sweeps_num=num_frames - 1,
-        test_mode=True,
-    ),
+    # dict(
+    #     type="LoadMultiViewImageFromMultiSweeps",
+    #     sweeps_num=num_frames - 1,
+    #     test_mode=True,
+    # ),
     dict(type='LoadOccupancySurroundOcc'), # test 推理没有加这一步
     dict(type="RandomTransformImage", ida_aug_conf=ida_aug_conf, training=False),
     dict(
@@ -216,15 +231,18 @@ test_pipeline = [
 data = dict(
     samples_per_gpu=batch_size,
     # workers_per_gpu=4,
-    workers_per_gpu=0,
+    workers_per_gpu=workers_per_gpu,
     train=dict(
         type=dataset_type,
         data_root=data_root,
         # ann_file=data_root + 'nuscenes_infos_train_sweep.pkl',
         ann_file = train_ann,
         occ_gt=occ_gt,
+        #=================================#
         seq_split_num=1, # streaming video training
         seq_mode=seq_mode, # streaming video training
+        
+        
         pipeline=train_pipeline,
         classes=object_names,
         modality=input_modality,
@@ -244,12 +262,15 @@ data = dict(
         ann_file=val_ann,
         occ_gt=occ_gt,
         classes=object_names, modality=input_modality),
-    shuffler_sampler=dict(
-        type='InfiniteGroupEachSampleInBatchSampler',
-        seq_split_num=2,
-        num_iters_to_seq=num_epochs_single_frame*num_iters_per_epoch,
-        random_drop=0.0
-    ),
+    
+    # shuffler_sampler=dict(
+    #     type='InfiniteGroupEachSampleInBatchSampler',
+    #     seq_split_num=2,
+    #     num_iters_to_seq=num_epochs_single_frame*num_iters_per_epoch,
+    #     random_drop=0.0
+    # ),
+    # shuffler_sampler = dict(type='DistributedSampler'),
+    shuffler_sampler=dict(type='DistributedGroupSampler'),
     nonshuffler_sampler=dict(type='DistributedSampler')
 )
 
@@ -278,38 +299,18 @@ lr_config = dict(
     min_lr_ratio=1e-3,
 )
 
-evaluation = dict(interval=num_iters_per_epoch*num_epochs, pipeline=test_pipeline)
+evaluation = dict(interval=val_interval, pipeline=test_pipeline)
 find_unused_parameters=False #### when use checkpoint, find_unused_parameters must be False
-checkpoint_config = dict(interval=num_iters_per_epoch, max_keep_ckpts=3)
+checkpoint_config = dict(interval=num_iters_per_epoch, max_keep_ckpts=max_keep_ckpts)
+
+log_config = dict(
+    interval=log_interval,   # 每10个iter打印一次
+    hooks=[
+        dict(type='TextLoggerHook'),
+        # dict(type='TensorboardLoggerHook')  # 如果你用tensorboard
+    ])
+
 runner = dict(
-    type='IterBasedRunner', max_iters=num_epochs * num_iters_per_epoch)
+    type='IterBasedRunner', max_iters=max_iters)
 load_from=None
 resume_from=None
-
-
-# ===> per class IoU of 6019 samples:
-# ===> noise - IoU = nan
-# ===> barrier - IoU = 21.35
-# ===> bicycle - IoU = 11.9
-# ===> bus - IoU = 28.35
-# ===> car - IoU = 32.12
-# ===> construction_vehicle - IoU = 15.46
-# ===> motorcycle - IoU = 15.84
-# ===> pedestrian - IoU = 13.2
-# ===> traffic_cone - IoU = 11.83
-# ===> trailer - IoU = 11.87
-# ===> truck - IoU = 23.71
-# ===> driveable_surface - IoU = 47.3
-# ===> other_flat - IoU = 29.19
-# ===> sidewalk - IoU = 30.29
-# ===> terrain - IoU = 28.22
-# ===> manmade - IoU = 13.23
-# ===> vegetation - IoU = 25.75
-# ===> mIoU of 6019 samples: 22.48
-#
-# Starting Evaluation...
-# 100%|███████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 6019/6019 [01:36<00:00, 62.20it/s]
-# ===> per class IoU of 6019 samples:
-# ===> non-free - IoU = 34.91
-# ===> mIoU of 6019 samples: 34.91
-# {'mIoU': 22.48, 'binary_mIoU': 34.91}

@@ -162,31 +162,31 @@ class StreamOccHead(BaseModule):
             self.memory_mask = memory_refresh(self.memory_mask[:, :self.memory_len], x)
 
     def post_update_memory(self, data, rec_ego_pose, all_query_feats, all_cls_scores, all_sq_preds):
-        sq_mean = decode_points(all_sq_preds[-1][..., 0:3], self.pc_range)  # (B, Q，N_refine, 3)
-        rec_reference_points = torch.mean(sq_mean, dim=2)       # (B, Q, 3)
+        sq_mean = decode_points(all_sq_preds[-1][..., 0:3], self.pc_range)           # (1 600 8 3) # (B, Q，N_refine, 3)
+        rec_reference_points = torch.mean(sq_mean, dim=2)                            # (1 600 3)   # (B, Q, 3)
 
-        rec_memory = all_query_feats[-1]    # (B, Q, C)
-        rec_timestamp = torch.zeros_like(rec_memory[..., 0:1], dtype=torch.float64)
-        mem_mask = torch.ones_like(rec_memory[..., 0], dtype=torch.int)
+        rec_memory = all_query_feats[-1]                                             # (1 600 256) # (B, Q, C)
+        rec_timestamp = torch.zeros_like(rec_memory[..., 0:1], dtype=torch.float64)  # (1 600 1)
+        mem_mask = torch.ones_like(rec_memory[..., 0], dtype=torch.int)              # (1 600)
 
-        scales = all_sq_preds[-1][..., 3:6]         # (B, Q，N_refine, 3)
-        s = scales.max(dim=-1)[0].max(dim=-1)[0]    # (B, Q)
-        _, topk_indexes = torch.topk(s, self.topk_proposals, dim=1)
+        scales = all_sq_preds[-1][..., 3:6]                                          # (1 600 8 3) # (B, Q，N_refine, 3)
+        s = scales.max(dim=-1)[0].max(dim=-1)[0]                                     # (1 600)     # (B, Q)
+        _, topk_indexes = torch.topk(s, self.topk_proposals, dim=1)                  # (1 500)
 
-        rec_timestamp = topk_gather(rec_timestamp, topk_indexes)
-        rec_reference_points = topk_gather(rec_reference_points, topk_indexes).detach()
-        rec_memory = topk_gather(rec_memory, topk_indexes).detach()
-        rec_ego_pose = topk_gather(rec_ego_pose, topk_indexes)
+        rec_timestamp = topk_gather(rec_timestamp, topk_indexes)                        # (1 600 1) (1 500) -> (1 500 1)
+        rec_reference_points = topk_gather(rec_reference_points, topk_indexes).detach() # (1 600 3) (1 500) -> (1 500 3)
+        rec_memory = topk_gather(rec_memory, topk_indexes).detach()                     # (1 600 256) (1 500) -> (1 500 256)
+        rec_ego_pose = topk_gather(rec_ego_pose, topk_indexes)                          # (1 600 4 4) (1 500) -> (1 500 4 4)
 
-        self.memory_embedding = torch.cat([rec_memory, self.memory_embedding], dim=1)
-        self.memory_timestamp = torch.cat([rec_timestamp, self.memory_timestamp], dim=1)
-        self.memory_egopose = torch.cat([rec_ego_pose, self.memory_egopose], dim=1)
-        self.memory_reference_point = torch.cat([rec_reference_points, self.memory_reference_point], dim=1)
+        self.memory_embedding = torch.cat([rec_memory, self.memory_embedding], dim=1)                        # (1 1000 256)
+        self.memory_timestamp = torch.cat([rec_timestamp, self.memory_timestamp], dim=1)                     # (1 1000 1)
+        self.memory_egopose = torch.cat([rec_ego_pose, self.memory_egopose], dim=1)                          # (1 1000 4 4)
+        self.memory_reference_point = torch.cat([rec_reference_points, self.memory_reference_point], dim=1)  # (1 1000 3)
         self.memory_reference_point, _ = transform_reference_points(self.memory_reference_point, data['ego_pose'],
-                                                                    reverse=False)
-        self.memory_mask = torch.cat([mem_mask, self.memory_mask], dim=1)
+                                                                    reverse=False)                           # (1 1000 3) (1 4 4) -> (1 1000 3)
+        self.memory_mask = torch.cat([mem_mask, self.memory_mask], dim=1)                                    # (1 1100)
         self.memory_timestamp -= data['timestamp'].unsqueeze(-1).unsqueeze(-1)
-        self.memory_egopose = data['ego_pose'].unsqueeze(1) @ self.memory_egopose
+        self.memory_egopose = data['ego_pose'].unsqueeze(1) @ self.memory_egopose                            # (1 1 4 4) @ (1 1000 4 4) -> (1 1000 4 4)
 
     def prop_queries(self, query_feat, reference_points, temp_memory, temp_reference_point, data): # todo query传播与采样
         """
@@ -269,7 +269,7 @@ class StreamOccHead(BaseModule):
         if self.temp_fusion: # True
             self.pre_update_memory(data) # 以物体为中心的时序建模：大小为Np的内存队列，用于存储上一帧选定的查询 Np
 
-        mlvl_feats = data['img_feats']
+        mlvl_feats = data['img_feats'] # 4:(1 48 256 64 176) (1 48 256 32 88) (1 48 256 16 44) (1 48 256 8 22)
         B, Q, = mlvl_feats[0].shape[0], self.num_query # todo self.num_query: Nq: T:600 S:1200 M:2400 L:3600 Nq
         # (N_query, 3) --> (B, N_query, 3)
         init_points = self.init_points.weight[None, :, :].repeat(B, 1, 1) # todo (1 3600 3) 初始查询的3维参考点 # 以视角为中心的时序建模：初始化的查询从内存队列中采样和聚合多帧图像特征
@@ -292,18 +292,18 @@ class StreamOccHead(BaseModule):
         # =======================================================#
         # 对应论文C.(1)节工作：以视图为中心的时序建模：视图中心路径旨在从历史观测序列中提取细粒度的时序线索
         query_feats, cls_scores, refine_sqs = self.transformer(
-            query_feat,  # (1 600 256)
+            query_feat,                         # (1 600 256)
             reference_points.unsqueeze(dim=2),  # (1 600 1 3)
-            temp_memory,  # (1 0 256)
-            temp_reference_point,  #  (1 0 3)
-            memory_mask, # todo (1 0)
-            mlvl_feats,  # 4:(1 48 256 64 176) (1 48 256 32 88) (1 48 256 16 44) (1 48 256 8 22)
+            temp_memory,                        # (1 0 256) memory相关：未用到
+            temp_reference_point,               #  (1 0 3)
+            memory_mask,                        # todo (1 0)
+            mlvl_feats,                         # 4:(1 48 256 64 176) (1 48 256 32 88) (1 48 256 16 44) (1 48 256 8 22)
             data,
             img_metas=img_metas,
         ) # query_feats: 6 -> (1 600 256)x6 cls_scores: 6 -> (1 600 n 17) refine_sqs: 6 -> (1 600 n 13) 注：T/S:n=2 2 4 4 8 8 M/L:n=1 1 2 2 4 4
 
         # =======================================================#
-        #  
+        # 解码 & 占据预测 
         cls_scores_list = []
         refine_sqs_list = []
         pred_occ_list = []
@@ -311,6 +311,8 @@ class StreamOccHead(BaseModule):
             if not self.training:
                 if i < (len(refine_sqs) - 1):
                     continue
+            #=============================================================#
+            # D.Multi-Superquadric Decoding Strategy 超二次曲面解码
             sq_mean = decode_points(refine_sqs[i][..., 0:3], self.pc_range) # (1 600 8 3) # (B, Q，N_refine, 3) pc_range: [-50 -50 -5 50 50 3]
             sq_scales = safe_sigmoid(refine_sqs[i][..., 3:6])               # (1 600 8 3) # (B, Q，N_refine, 3)
             sq_scales = self.scale_range[0] + (
@@ -326,6 +328,7 @@ class StreamOccHead(BaseModule):
             cls_scores_list.append(cls_score)
             
             #==============================================================#
+            # 论文E. Efficient Superquadric-to-Voxel Splatting 占据预测
             occ_pred = self.sq2occ(cls_score, sqs) # (1 600 n 17) (1 600 n 13) -> (1 200 200 16 18) 注：T/S：n=8 M/L：n=4
             pred_occ_list.append(occ_pred)
 
@@ -341,14 +344,21 @@ class StreamOccHead(BaseModule):
                 np.savez_compressed(f'{save_path}/pred_superquadrics.npz', sqs=sqs.detach().cpu().numpy())
                 np.savez_compressed(f'{save_path}/pred_semantics.npz', cls_score=cls_score.detach().cpu().numpy())
                 np.savez_compressed(f'{save_path}/pred_occupancy.npz', occ_pred=occ_pred.detach().cpu().numpy().astype(np.uint8))
-
-        if self.temp_fusion: # todo True
-            self.post_update_memory(data, rec_ego_pose, query_feats, cls_scores, refine_sqs)
-
-        return dict(init_points=init_points,
-                    all_cls_scores=cls_scores,
-                    all_refine_sqs=refine_sqs,
-                    all_pred_occ_list=pred_occ_list)
+        
+        #==============================================#
+        # 论文C.(2). 每一帧前景得分最高的Np个查询及其参考点被推入内存队列，经过时序对齐后，被传播至下一帧
+        # 较大的尺度通常意味着更显著的贡献，因此，我们将每个查询的前景得分定义为预测的K个超二次曲面中的最大缩放比例。
+        if self.temp_fusion: # True
+            self.post_update_memory(data, 
+                                    rec_ego_pose, # (1 600 4 4)
+                                    query_feats,  # 6:(1 600 256)x6
+                                    cls_scores,   # 6:(1 600 2 17)x2 (1 600 4 17)x2 (1 600 8 17)x2
+                                    refine_sqs)   # 6:(1 600 2 13)x2 (1 600 4 13)x2 (1 600 8 13)x2
+ 
+        return dict(init_points=init_points,          # (1 600 3)
+                    all_cls_scores=cls_scores,        # 6:(1 600 2 17)x2 (1 600 4 17)x2 (1 600 8 17)x2
+                    all_refine_sqs=refine_sqs,        # 6:(1 600 2 13)x2 (1 600 4 13)x2 (1 600 8 13)x2
+                    all_pred_occ_list=pred_occ_list)  # n:(1 200 200 16 18) train: n=6 test: n=1
 
     def sq2occ(self, cls_scores, refine_sqs):
         """
@@ -416,19 +426,19 @@ class StreamOccHead(BaseModule):
             cls_scores: (B, Dx, Dy, Dz, n_cls)
             voxel_semantics: (B, Dx=200, Dy=200, Dz=16)
         """
-        voxel_semantics = voxel_semantics.long()  # (B, Dx, Dy, Dz)
-        preds = pred_occ.permute(0, 4, 1, 2, 3).contiguous()  # (B, n_cls, Dx, Dy, Dz)
+        voxel_semantics = voxel_semantics.long()             # (1 200 200 16)# (B, Dx, Dy, Dz)
+        preds = pred_occ.permute(0, 4, 1, 2, 3).contiguous() # (1 18 200 200 16) # (B, n_cls, Dx, Dy, Dz)
         preds = torch.clamp(preds, 1e-6, 1. - 1e-6)
 
         num_total_samples = 0
-        for i in range(self.num_classes + 1):
-            if i == self.ignore_label:  # 跳过忽略的类别
+        for i in range(self.num_classes + 1): # self.num_classes: 17
+            if i == self.ignore_label:        # self.ignore_label: 0                # 跳过忽略的类别
                 continue
             num_total_samples += (voxel_semantics == i).sum() * self.cls_weights[i]
-        loss_occ = self.loss_occ(
-            preds,
-            voxel_semantics,
-            avg_factor=num_total_samples
+        loss_occ = self.loss_occ(             # CE_loss
+            preds,                            # (1 18 200 200 16)
+            voxel_semantics,                  # (1 200 200 16)
+            avg_factor=num_total_samples      
         )
 
         loss_voxel_lovasz = lovasz_softmax(preds, voxel_semantics, ignore=self.ignore_label)
@@ -444,8 +454,8 @@ class StreamOccHead(BaseModule):
             reference_points: (B, N_q, 3)
             gt_points_list: List[(N_occ0, 3), (N_occ1, 3), ...]
         """
-        num_imgs = reference_points.size(0)
-        reference_points = reference_points.reshape(num_imgs, -1, 3).contiguous()     # (B, N_q, 3)
+        num_imgs = reference_points.size(0) # (1 600 3)
+        reference_points = reference_points.reshape(num_imgs, -1, 3).contiguous()  # (1 600 3)   # (B, N_q, 3)
         reference_points_list = [reference_points[i] for i in range(num_imgs)]   # List[(Q, 3), (Q, 3), ...]
 
         (gt_paired_pts, pred_paired_pts) = multi_apply(
@@ -480,12 +490,12 @@ class StreamOccHead(BaseModule):
                 'all_pred_occ_list': List[(B, Dx, Dy, Dz, 18), (B, Dx, Dy, Dz, 18), ...]
             }
         """
-        all_pred_occ_list = preds_dicts['all_pred_occ_list']  # List[(B, Dx, Dy, Dz, 18), (B, Dx, Dy, Dz, 18), ...]
+        all_pred_occ_list = preds_dicts['all_pred_occ_list'] #6:(1 200 200 16 18)x6 # List[(B, Dx, Dy, Dz, 18), (B, Dx, Dy, Dz, 18), ...]
 
-        num_dec_layers = len(all_pred_occ_list)
-        voxel_semantics_list = [voxel_semantics for _ in range(num_dec_layers)]
+        num_dec_layers = len(all_pred_occ_list) # 6
+        voxel_semantics_list = [voxel_semantics for _ in range(num_dec_layers)] # 6:(1 200 200 16 18)x6
 
-        losses_occ, losses_voxel_lovasz = multi_apply(
+        losses_occ, losses_voxel_lovasz = multi_apply(  # multi_apply: 把同一个函数批量作用在多个输入上
             self.loss_single,
             all_pred_occ_list,  # List[(B, Dx, Dy, Dz, 18), (B, Dx, Dy, Dz, 18), ...]
             voxel_semantics_list,  # List[(B, Dx=200, Dy=200, Dz=16), (B, Dx=200, Dy=200, Dz=16), ...]
@@ -507,8 +517,8 @@ class StreamOccHead(BaseModule):
         # gt_points_list: List[(N_occ0, 3), (N_occ1, 3), ...]
         # gt_labels_list: List[(N_occ0,), (N_occ1,), ...]
         gt_points_list, gt_labels_list = \
-            self.get_sparse_voxels(voxel_semantics)
-        init_points = preds_dicts['init_points']  # (B, Q, 3)
+            self.get_sparse_voxels(voxel_semantics) # 1:(num_voxel,3)
+        init_points = preds_dicts['init_points']    # (1 600 3) # (B, Q, 3)
         init_points = decode_points(init_points, self.pc_range)  # (B, Q, 3)
         init_loss_pts = self.loss_pts_single(init_points, gt_points_list)[0]
         loss_dict['init_loss_pts'] = init_loss_pts
@@ -546,12 +556,12 @@ class StreamOccHead(BaseModule):
             gt_points: List[(N_occ0, 3), (N_occ1, 3), ...]
             gt_labels: List[(N_occ0, ), (N_occ1, ), ...]
         """
-        coors = self.gt_xyz
+        coors = self.gt_xyz # (200 200 16 3)
         voxel_semantics = voxel_semantics.long()
 
         gt_points, gt_masks, gt_labels = [], [], []
         for i in range(len(voxel_semantics)):
-            mask = (voxel_semantics[i] != self.empty_label) & (voxel_semantics[i] != self.ignore_label)  # (Dx, Dy, Dz)
+            mask = (voxel_semantics[i] != self.empty_label) & (voxel_semantics[i] != self.ignore_label) # 筛掉无效体素：空体素和忽略体素 # (Dx, Dy, Dz)
             gt_points.append(coors[mask])  # (N_occ, 3)
             gt_labels.append(voxel_semantics[i][mask])  # (N_occ, )
 

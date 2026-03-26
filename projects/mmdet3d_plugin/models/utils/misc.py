@@ -131,21 +131,21 @@ def quat_mul(q, p):
 
 
 def transform_reference_points(reference_points, egopose, vel=None, time_diff=None, reverse=False, translation=True):
-    if vel is not None:
+    if vel is not None: # 时间对齐
         assert time_diff is not None
-        reference_points[..., :2] += vel * time_diff[:, None, None]
-    reference_points = torch.cat([reference_points, torch.ones_like(reference_points[..., 0:1])], dim=-1)
-    if reverse:
+        reference_points[..., :2] += vel * time_diff[:, None, None] # 将点移动到目标时间
+    reference_points = torch.cat([reference_points, torch.ones_like(reference_points[..., 0:1])], dim=-1) # (1 1000 3) -> (1 1000 4) 变齐次坐标
+    if reverse: # 决定变换方向：目标 -> 当前坐标系
         matrix = egopose.inverse()
-    else:
+    else:       # 当前 -> 目标坐标系
         matrix = egopose
     if not translation:
         matrix[..., :3, 3] = 0.0
 
     expand_dims = reference_points.dim() - 2
     new_shape = matrix.shape[:1] + (1, ) * expand_dims + matrix.shape[1:]
-    matrix_expanded = matrix.view(*new_shape)
-    reference_points = (matrix_expanded @ reference_points.unsqueeze(-1)).squeeze(-1)[..., :3]
+    matrix_expanded = matrix.view(*new_shape) # (1 4 4) -> (1 1 4 4)
+    reference_points = (matrix_expanded @ reference_points.unsqueeze(-1)).squeeze(-1)[..., :3] # (1 1 4 4)@(1 1000 4 1) -> (1 1000 4 1) -> (1 1000 3)
 
     if vel is not None:
         vel = torch.matmul(

@@ -30,7 +30,8 @@ class NuScenesDatasetSurroundOcc(NuScenesDataset):
         self.data_infos = self.load_annotations(self.ann_file)
         # todo ----------------------------------#
         # todo 只取5个
-        self.data_infos = self.data_infos[::80][:5] 
+        self.data_infos = self.data_infos[::80][:10] #! 筛选数据后，需要再做一下_set_group_flag()
+        self._set_group_flag() 
 
         self.adj_list = adj_list
 
@@ -131,7 +132,7 @@ class NuScenesDatasetSurroundOcc(NuScenesDataset):
         input_dict = self.get_data_info(index)
         self.pre_pipeline(input_dict)
         example = self.pipeline(input_dict)
-        return example
+        return example # example['img'][0].data: offline:(48 3 256 704) online:(6 3 256 704)
 
     def get_data_info(self, index):
         info = self.data_infos[index]
@@ -282,7 +283,7 @@ class NuScenesDatasetSurroundOcc(NuScenesDataset):
             occ_gt_path = os.path.join(self.occ_gt, 'surroundocc', 'samples')
             # occ_gt_path = self.occ_gt
             occ_gt_path = os.path.join(occ_gt_path, info['lidar_path'].split('/')[-1] + '.npy')
-            label = np.load(occ_gt_path)
+            label = np.load(occ_gt_path) # (n 4)
             occ_labels = np.ones((200, 200, 16), dtype=np.int64) * 17
             occ_labels[label[:, 0], label[:, 1], label[:, 2]] = label[:, 3]
             mask_camera = occ_labels != 0
@@ -291,7 +292,7 @@ class NuScenesDatasetSurroundOcc(NuScenesDataset):
             # mask_camera = torch.from_numpy(mask_camera)
 
             occ_pred = occ_results[i].cpu().numpy()
-            metric.add_batch(occ_pred, occ_labels, mask_camera)
+            metric.add_batch(occ_pred, occ_labels, mask_camera) #
 
         return {'mIoU': metric.count_miou()}
 

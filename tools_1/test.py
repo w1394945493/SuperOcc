@@ -172,7 +172,7 @@ def main():
 
     cfg.model.pretrained = None
     # in case the test dataset is concatenated
-    samples_per_gpu = 1
+    samples_per_gpu = 1 # 这里默认为1
     if isinstance(cfg.data.test, dict): 
         cfg.data.test.test_mode = True
         samples_per_gpu = cfg.data.test.pop('samples_per_gpu', 1)
@@ -269,7 +269,8 @@ def main():
             ]:
                 eval_kwargs.pop(key, None)
             eval_kwargs.update(dict(metric=args.eval, **kwargs))
-
+            #===================================================#
+            # 评估 mIoU binary_mIoU
             print(dataset.evaluate(outputs, **eval_kwargs))
 
 

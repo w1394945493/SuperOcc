@@ -3,12 +3,21 @@
 # ---------------------------------------------
 #  Modified by Zhiqi Li
 # ---------------------------------------------
- 
+
+
 from __future__ import division
+
+import os
+os.environ["TMPDIR"] = "/vepfs-mlp2/c20250502/haoce/wangyushen/tmp"
+os.makedirs(os.environ["TMPDIR"], exist_ok=True)
+
+import sys
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 
 import argparse
 import copy
-import sys
+
 
 import mmcv
 import os
@@ -161,7 +170,8 @@ def main():
     if args.autoscale_lr:
         # apply the linear scaling rule (https://arxiv.org/abs/1706.02677)
         cfg.optimizer['lr'] = cfg.optimizer['lr'] * len(cfg.gpu_ids) / 8
-
+    
+    #================================================================#
     # init distributed env first, since logger depends on the dist info.
     if args.launcher == 'none':
         distributed = False

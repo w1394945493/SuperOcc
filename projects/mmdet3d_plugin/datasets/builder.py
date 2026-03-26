@@ -57,7 +57,7 @@ def build_dataloader(dataset,
             sampler = build_sampler(shuffler_sampler if shuffler_sampler is not None else dict(type='DistributedGroupSampler'),
                                      dict(
                                          dataset=dataset,
-                                         samples_per_gpu=samples_per_gpu,
+                                         samples_per_gpu=samples_per_gpu, # 有该参数，不能使用DistributedSampler
                                          num_replicas=world_size,
                                          rank=rank,
                                          seed=seed)
@@ -80,10 +80,10 @@ def build_dataloader(dataset,
 
     else:
         # assert False, 'not support in bevformer'
-        print('WARNING!!!!, Only can be used for obtain inference speed!!!!')
+        print('WARNING!!!!, Only can be used for obtain inference speed!!!!') #!!! 
         sampler = GroupSampler(dataset, samples_per_gpu) if shuffle else None
-        batch_size = num_gpus * samples_per_gpu
-        num_workers = num_gpus * workers_per_gpu
+        batch_size = num_gpus * samples_per_gpu  # samples_per_gpu: 默认为0
+        num_workers = num_gpus * workers_per_gpu # 
         batch_sampler = None
 
     if runner_type['type'] == 'IterBasedRunner' and shuffler_sampler['type'] =='InfiniteGroupEachSampleInBatchSampler':

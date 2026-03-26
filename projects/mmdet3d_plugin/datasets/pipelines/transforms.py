@@ -17,19 +17,19 @@ class RandomTransformImage:
         ida_mats = []
         resize, resize_dims, crop, flip, rotate = self.sample_augmentation()
         if len(results['lidar2img']) == len(results['img']):
-            for i in range(len(results['img'])):
+            for i in range(len(results['img'])): # offline: 48
                 img = Image.fromarray(np.uint8(results['img'][i]))
                 # resize, resize_dims, crop, flip, rotate = self._sample_augmentation()
                 img, ida_mat = self.img_transform(
                     img,
-                    resize=resize,
-                    resize_dims=resize_dims,
-                    crop=crop,
-                    flip=flip,
-                    rotate=rotate,
+                    resize=resize, # test: 0.44
+                    resize_dims=resize_dims, # 704 396
+                    crop=crop, # (140 704 396)
+                    flip=flip, # False
+                    rotate=rotate, # 0
                 )
-                results['img'][i] = np.array(img).astype(np.uint8)
-                results['lidar2img'][i] = ida_mat @ results['lidar2img'][i]
+                results['img'][i] = np.array(img).astype(np.uint8) # (256 704 3)
+                results['lidar2img'][i] = ida_mat @ results['lidar2img'][i] # (4 4) @ (4 4)
                 ida_mats.append(ida_mat)
 
         elif len(results['img']) == 6:
