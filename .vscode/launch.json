@@ -16,7 +16,7 @@
                 "--eval=bbox",
             ],
             "console": "integratedTerminal",
-            // "justMyCode": false,
+            "justMyCode": false,
         },
         {
             "name": "train(experiment)(surroundocc)",

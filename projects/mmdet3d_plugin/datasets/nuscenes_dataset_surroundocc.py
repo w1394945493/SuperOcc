@@ -257,6 +257,8 @@ class NuScenesDatasetSurroundOcc(NuScenesDataset):
                 continue
             return data
 
+
+
     def evaluate(self, occ_results, runner=None, show_dir=None, **eval_kwargs):
         if show_dir is not None:
             self.format_results(occ_results, submission_prefix=show_dir)

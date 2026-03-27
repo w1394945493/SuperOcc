@@ -228,6 +228,7 @@ test_pipeline = [
     ),
 ]
 
+# from mmdet3d.datasets.pipelines import MultiScaleFlipAug3D
 data = dict(
     samples_per_gpu=batch_size,
     # workers_per_gpu=4,
