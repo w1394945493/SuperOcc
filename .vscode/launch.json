@@ -44,6 +44,14 @@
             ],
             "console": "integratedTerminal",
             // "justMyCode": false,
-        },        
+        },  
+        {
+            "name": "debug dataset & sampler",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "/vepfs-mlp2/c20250502/haoce/wangyushen/SuperOcc/tools_1/debug_dataset_sampler.py",
+            "console": "integratedTerminal",
+            // "justMyCode": false,
+        },          
     ]
 }

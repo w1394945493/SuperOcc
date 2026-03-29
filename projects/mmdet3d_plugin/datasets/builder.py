@@ -57,7 +57,7 @@ def build_dataloader(dataset,
             sampler = build_sampler(shuffler_sampler if shuffler_sampler is not None else dict(type='DistributedGroupSampler'),
                                      dict(
                                          dataset=dataset,
-                                         samples_per_gpu=samples_per_gpu, # 有该参数，不能使用DistributedSampler
+                                         samples_per_gpu=samples_per_gpu, #  分布式训练时，有该参数，不能使用DistributedSampler
                                          num_replicas=world_size,
                                          rank=rank,
                                          seed=seed)
@@ -80,12 +80,16 @@ def build_dataloader(dataset,
 
     else:
         # assert False, 'not support in bevformer'
-        print('WARNING!!!!, Only can be used for obtain inference speed!!!!') #!!! 
-        sampler = GroupSampler(dataset, samples_per_gpu) if shuffle else None
+        # print('WARNING!!!!, Only can be used for obtain inference speed!!!!') #!!! 
+        #=====================================================================#
+        # GroupSampler: 按组采样数据，并保证每个batch里的数据属于同一组，同时对齐batch
+        sampler = GroupSampler(dataset, samples_per_gpu) if shuffle else None # 这里直接使用from mmdet.datasets.samplers import GroupSampler
         batch_size = num_gpus * samples_per_gpu  # samples_per_gpu: 默认为0
         num_workers = num_gpus * workers_per_gpu # 
         batch_sampler = None
-
+    
+    #=========================================================================#
+    # 优先级最高：覆盖前面的所有设置：如果使用的是"IterBaseRunner"并且指定了"InfiniteGroupEachSampleInBatchSampler"，sampler强制设置为None
     if runner_type['type'] == 'IterBasedRunner' and shuffler_sampler['type'] =='InfiniteGroupEachSampleInBatchSampler':
         # TODO: original has more options, but I'm not using them 
         # https://github.com/open-mmlab/mmdetection/blob/3b72b12fe9b14de906d1363982b9fba05e7d47c1/mmdet/datasets/builder.py#L145-L157
@@ -95,7 +99,7 @@ def build_dataloader(dataset,
                                          num_replicas=world_size,
                                          rank=rank,
                                          seed=seed)
-                                     )
+                                     ) # batch_sampler 优先级最高，不再使用batch_size和sampler
         batch_size = 1 # Since we have batch sampler, the batch_size must = 1
         sampler = None
 

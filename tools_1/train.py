@@ -239,7 +239,7 @@ def main():
         logger.info("Using SyncBN")
         
     logger.info(f'Model:\n{model}')
-    datasets = [build_dataset(cfg.data.train)]
+    datasets = [build_dataset(cfg.data.train)] # datasets: 这里已经定义了数据集dataset
     if len(cfg.workflow) == 2:
         val_dataset = copy.deepcopy(cfg.data.val)
         # in case we use a dataset wrapper

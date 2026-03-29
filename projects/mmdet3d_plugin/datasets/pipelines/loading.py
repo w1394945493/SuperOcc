@@ -163,13 +163,14 @@ class LoadMultiViewImageFromMultiSweeps:
             return results
 
         # world_size = get_dist_info()[1]
-        # if world_size == 1 and self.test_mode:
+        # if world_size == 1 and self.test_mode: # 当gpus
         #     #===================================#
         #     # online模式：使用当前帧作为过去帧
         #     return self.load_online(results)
         # else:
-        #     return self.load_offline(results)
+        #     return self.load_offline(results) # 其余状态，一律调用offline模式
         
+        # 只加载单帧图像
         return self.load_offline(results)
 
 

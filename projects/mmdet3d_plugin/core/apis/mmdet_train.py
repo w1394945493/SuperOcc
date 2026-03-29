@@ -67,7 +67,7 @@ def custom_train_detector(model,
             len(cfg.gpu_ids),
             dist=distributed,
             seed=cfg.seed,
-            shuffler_sampler=cfg.data.shuffler_sampler,  # dict(type='DistributedGroupSampler'),
+            shuffler_sampler=cfg.data.shuffler_sampler,  # dict(type='DistributedGroupSampler'),  dict(type='InfiniteGroupEachSampleInBatchSampler')
             nonshuffler_sampler=cfg.data.nonshuffler_sampler,  # dict(type='DistributedSampler'),
             runner_type=cfg.runner,
         ) for ds in dataset

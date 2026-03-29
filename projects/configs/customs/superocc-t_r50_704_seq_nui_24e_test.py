@@ -23,14 +23,14 @@ topk_proposals = 500
 num_propagated = 500
 
 #===============================#
-# prop_query = True    # temp_fusion、prop_query、with_ego_pos和num_frames 应该是一起的
-# temp_fusion = True   # 用于控制是否做时序融合
-# with_ego_pos = True
-# num_frames = 8       # 控制视频帧
-prop_query = False    # temp_fusion、prop_query、with_ego_pos和num_frames 应该是一起的
-temp_fusion = False   # 用于控制是否做时序融合
-with_ego_pos = False
-num_frames = 1       # 控制视频帧
+prop_query = True    # temp_fusion、prop_query、with_ego_pos和num_frames 应该是一起的
+temp_fusion = True   # 用于控制是否做时序融合
+with_ego_pos = True
+num_frames = 8       # 控制视频帧
+# prop_query = False    # temp_fusion、prop_query、with_ego_pos和num_frames 应该是一起的
+# temp_fusion = False   # 用于控制是否做时序融合
+# with_ego_pos = False
+# num_frames = 1       # 控制视频帧
 #===============================#
 
 num_levels = 4
@@ -55,22 +55,22 @@ occ_names = [
 #======================= train params =============================#
 # num_gpus = 4
 # batch_size = 2
-num_gpus = 2
+num_gpus = 1
 batch_size = 1
-workers_per_gpu=4
+workers_per_gpu=0
 
-log_interval=5 # 日志打印间隔
+log_interval=5 #！！ 日志打印间隔
 # num_iters_per_epoch = 28130 // (num_gpus * batch_size)
-num_iters_per_epoch = 10 // (num_gpus * batch_size)   # 每个epoch迭代步数：num_train_dataset // (num_gpus * batch_size)
+num_iters_per_epoch = 24 // (num_gpus * batch_size)   # 每个epoch迭代步数：num_train_dataset // (num_gpus * batch_size)
 num_epochs = 24                                       # 最大训练epoch数
 max_iters = num_epochs * num_iters_per_epoch          # 最大迭代次数
 max_keep_ckpts=2                                      # 最多保留model数量
 # val_interval=num_iters_per_epoch*num_epochs           # 评估间隔
 val_interval=num_iters_per_epoch           # 评估间隔
 
-# num_epochs_single_frame = 2
-# seq_mode = True # 视频流训练
-seq_mode = False
+num_epochs_single_frame = 2
+seq_mode = True # 视频流训练
+# seq_mode = False
 
 collect_keys = ['lidar2img', 'intrinsics', 'extrinsics', 'timestamp', 'img_timestamp', 'ego_pose', 'ego_pose_inv']
 
@@ -182,7 +182,7 @@ ida_aug_conf = {
 
 train_pipeline = [
     dict(type='LoadMultiViewImageFromFiles', to_float32=False, color_type='color'),
-    # dict(type='LoadMultiViewImageFromMultiSweeps', sweeps_num=num_frames - 1),
+    dict(type='LoadMultiViewImageFromMultiSweeps', sweeps_num=num_frames - 1),
     dict(type='LoadOccupancySurroundOcc'),
     dict(type='RandomTransformImage', ida_aug_conf=ida_aug_conf, training=True),
     dict(type='CustomFormatBundle3D', class_names=object_names, collect_keys=collect_keys),
@@ -192,11 +192,11 @@ train_pipeline = [
 
 test_pipeline = [
     dict(type="LoadMultiViewImageFromFiles", to_float32=False, color_type="color"),
-    # dict(
-    #     type="LoadMultiViewImageFromMultiSweeps",
-    #     sweeps_num=num_frames - 1,
-    #     test_mode=True,
-    # ),
+    dict(
+        type="LoadMultiViewImageFromMultiSweeps",
+        sweeps_num=num_frames - 1,
+        test_mode=True,
+    ),
     dict(type='LoadOccupancySurroundOcc'), # test 推理没有加这一步
     dict(type="RandomTransformImage", ida_aug_conf=ida_aug_conf, training=False),
     dict(
@@ -264,14 +264,14 @@ data = dict(
         occ_gt=occ_gt,
         classes=object_names, modality=input_modality),
     
-    # shuffler_sampler=dict(
-    #     type='InfiniteGroupEachSampleInBatchSampler',
-    #     seq_split_num=2,
-    #     num_iters_to_seq=num_epochs_single_frame*num_iters_per_epoch,
-    #     random_drop=0.0
-    # ),
+    shuffler_sampler=dict(
+        type='InfiniteGroupEachSampleInBatchSampler',
+        seq_split_num=2,
+        num_iters_to_seq=num_epochs_single_frame*num_iters_per_epoch,
+        random_drop=0.0
+    ),
     # shuffler_sampler = dict(type='DistributedSampler'),
-    shuffler_sampler=dict(type='DistributedGroupSampler'),
+    # shuffler_sampler=dict(type='DistributedGroupSampler'),
     nonshuffler_sampler=dict(type='DistributedSampler')
 )
 

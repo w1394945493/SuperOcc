@@ -30,7 +30,7 @@ class NuScenesDatasetSurroundOcc(NuScenesDataset):
         self.data_infos = self.load_annotations(self.ann_file)
         # todo ----------------------------------#
         # todo 只取5个
-        self.data_infos = self.data_infos[::80][:10] #! 筛选数据后，需要再做一下_set_group_flag()
+        self.data_infos = self.data_infos[::80][:24] #! 筛选数据后，需要再做一下_set_group_flag()
         self._set_group_flag() 
 
         self.adj_list = adj_list

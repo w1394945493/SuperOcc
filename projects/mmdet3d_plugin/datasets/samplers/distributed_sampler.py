@@ -24,13 +24,13 @@ class DistributedSampler(_DistributedSampler):
             dataset, num_replicas=num_replicas, rank=rank, shuffle=shuffle)
         # for the compatibility from PyTorch 1.3+
         self.seed = seed if seed is not None else 0
-
+    
     def __iter__(self):
         # deterministically shuffle based on epoch
         if self.shuffle:
             assert False
         else:
-            indices = torch.arange(len(self.dataset)).tolist()
+            indices = torch.arange(len(self.dataset)).tolist() # 已经把所有index都准备好了
 
         # add extra samples to make it evenly divisible
         # in case that indices is shorter than half of total_size
